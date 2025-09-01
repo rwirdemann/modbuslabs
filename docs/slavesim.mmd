@@ -11,7 +11,7 @@ classDiagram
     namespace modbuslabs {
         class Bus {
             url: string
-            handleMasterConnection(modbus.Reader)
+            handleMasterConnection(modbus.Connection)
         }
 
         class Slave {
@@ -43,7 +43,7 @@ classDiagram
 
 
     namespace modbus {
-        class modbus.Reader {
+        class modbus.Connection {
             <<interface>>
         }
     }
@@ -62,7 +62,7 @@ classDiagram
     Bus "1" --> "0..*" Slave
     ControlPort <|.. Bus
     Bus ..> ProtocolPort
-    Bus ..> modbus.Reader
+    Bus ..> modbus.Connection
     Bus --> TransportHandler
     Slave --> RegisterMap
 

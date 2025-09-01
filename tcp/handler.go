@@ -10,27 +10,27 @@ import (
 	"github.com/rwirdemann/modbuslabs"
 )
 
-const (
-	maxTCPFrameLength int = 260
-)
-
-type Reader struct {
+type Connection struct {
 	conn net.Conn
 }
 
-func NewReader(c net.Conn) *Reader {
-	return &Reader{conn: c}
+func NewConnection(c net.Conn) *Connection {
+	return &Connection{conn: c}
 }
 
-func (r Reader) Read(p []byte) (n int, err error) {
+func (r Connection) Read(p []byte) (n int, err error) {
 	return r.conn.Read(p)
 }
 
-func (r Reader) Close() {
+func (r Connection) Write(b []byte) (n int, err error) {
+	return r.conn.Write(b)
+}
+
+func (r Connection) Close() {
 	r.conn.Close()
 }
 
-func (r Reader) Name() string {
+func (r Connection) Name() string {
 	return r.conn.RemoteAddr().String()
 }
 
@@ -47,7 +47,7 @@ func NewHandler(url string) (*Handler, error) {
 	return nil, fmt.Errorf("invalid url format %s", url)
 }
 
-func (h *Handler) Start(ctx context.Context, cb modbuslabs.HandleMasterCallback) (err error) {
+func (h *Handler) Start(ctx context.Context, cb modbuslabs.HandleMasterConnectionCallback) (err error) {
 	h.listener, err = net.Listen("tcp", h.url)
 	if err != nil {
 		return fmt.Errorf("failed to start TCP listener: %w", err)
@@ -65,7 +65,7 @@ func (h *Handler) Stop() error {
 	return nil
 }
 
-func (h *Handler) acceptClients(ctx context.Context, cb modbuslabs.HandleMasterCallback) {
+func (h *Handler) acceptClients(ctx context.Context, cb modbuslabs.HandleMasterConnectionCallback) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -74,7 +74,7 @@ func (h *Handler) acceptClients(ctx context.Context, cb modbuslabs.HandleMasterC
 			conn, err := h.listener.Accept()
 			if err == nil {
 				slog.Info("client connected", "remote addr", conn.RemoteAddr())
-				go cb(ctx, NewReader(conn))
+				go cb(ctx, NewConnection(conn))
 			}
 		}
 	}
