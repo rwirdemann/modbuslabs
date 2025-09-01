@@ -30,7 +30,7 @@ func (h *Bus) handleMasterConnection(ctx context.Context, r modbus.Reader) {
 		case <-ctx.Done():
 			return
 		default:
-			pdu, txid, err := modbus.ReadMBAPFrame(r, 260)
+			pdu, txid, err := modbus.ReadMBAPFrame(r, modbus.MaxFrameLength)
 			if err != nil {
 				if err == io.EOF {
 					slog.Info("client disconnected", "remote addr", r.Name())

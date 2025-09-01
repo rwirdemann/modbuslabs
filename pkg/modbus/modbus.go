@@ -9,6 +9,7 @@ import (
 
 const (
 	MBAPHeaderLength = 7
+	MaxFrameLength   = 260
 )
 
 // PDU is a struct to represent a Modbus Protocol Data unit.
@@ -60,7 +61,7 @@ func ReadMBAPFrame(conn io.Reader, maxFrameLength int) (*PDU, uint16, error) {
 
 	// never read more than the max allowed frame length
 	if int(bytesNeeded)+MBAPHeaderLength > maxFrameLength {
-		return nil, 0, errors.New("protocol error: maxTCPFrameLength exceeded")
+		return nil, 0, errors.New("protocol error: maxFrameLength exceeded")
 	}
 
 	// an MBAP length of 0 is illegal

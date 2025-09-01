@@ -1,0 +1,75 @@
+%%| deviceScaleFactor: 4
+classDiagram
+    namespace tcp {
+        class tcp.TransportHandler
+    }
+
+    namespace rtu {
+        class rtu.TransportHandler
+    }
+
+    namespace modbuslabs {
+        class Bus {
+            url: string
+            handleMasterConnection(modbus.Reader)
+        }
+
+        class Slave {
+            id: int8
+            connected: bool
+        }
+        class RegisterMap {
+            <<interface>>
+            Write
+            Read
+        }
+        class TransportHandler{
+            <<interface>>
+            Start
+            Stop
+        }
+
+        class ControlPort {
+            <<interface>>
+            AddSlave()
+            ConnectSlave()
+        }
+
+        class ProtocolPort {
+            <<interface>>
+            Info()
+        }
+    }
+
+
+    namespace modbus {
+        class modbus.Reader {
+            <<interface>>
+        }
+    }
+
+    namespace tui {
+        class tui.Model
+    }
+
+    namespace memory {
+        class memory.RegisterMap
+    }
+
+    TransportHandler <|.. tcp.TransportHandler
+    TransportHandler <|.. rtu.TransportHandler
+
+    Bus "1" --> "0..*" Slave
+    ControlPort <|.. Bus
+    Bus ..> ProtocolPort
+    Bus ..> modbus.Reader
+    Bus --> TransportHandler
+    Slave --> RegisterMap
+
+
+    tui.Model ..> ControlPort : uses
+    ProtocolPort <|.. tui.Model : implements
+
+    RegisterMap <|.. memory.RegisterMap
+
+    
