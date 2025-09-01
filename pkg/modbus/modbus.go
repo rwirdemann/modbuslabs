@@ -10,6 +10,8 @@ import (
 const (
 	MBAPHeaderLength = 7
 	MaxFrameLength   = 260
+
+	FCWriteSingleRegister uint8 = 0x06
 )
 
 // PDU is a struct to represent a Modbus Protocol Data unit.
@@ -35,7 +37,7 @@ func (p PDU) String() string {
 // 00 02      - Quantity (2 Register)
 //
 // Returns the [PDU] and transaction on success.
-func ReadMBAPFrame(conn io.Reader, maxFrameLength int) (*PDU, uint16, error) {
+func ReadMBAPFrame(conn io.Reader) (*PDU, uint16, error) {
 
 	// read the MBAP header
 	rxbuf := make([]byte, MBAPHeaderLength)
@@ -60,7 +62,7 @@ func ReadMBAPFrame(conn io.Reader, maxFrameLength int) (*PDU, uint16, error) {
 	bytesNeeded--
 
 	// never read more than the max allowed frame length
-	if int(bytesNeeded)+MBAPHeaderLength > maxFrameLength {
+	if int(bytesNeeded)+MBAPHeaderLength > MaxFrameLength {
 		return nil, 0, errors.New("protocol error: maxFrameLength exceeded")
 	}
 
@@ -89,4 +91,33 @@ func ReadMBAPFrame(conn io.Reader, maxFrameLength int) (*PDU, uint16, error) {
 	}
 
 	return pdu, txid, nil
+}
+
+// AssembleMBAPFrame turns a PDU into an MBAP frame (MBAP header + PDU) and returns it as bytes.
+func AssembleMBAPFrame(txnId uint16, p *PDU) []byte {
+	// transaction identifier
+	payload := uint16ToBytes(txnId)
+
+	// protocol identifier (always 0x0000)
+	payload = append(payload, 0x00, 0x00)
+
+	// length (covers unit identifier + function code + payload fields)
+	payload = append(payload, uint16ToBytes(uint16(2+len(p.Payload)))...)
+
+	// unit identifier
+	payload = append(payload, p.UnitId)
+
+	// function code
+	payload = append(payload, p.FunctionCode)
+
+	// payload
+	payload = append(payload, p.Payload...)
+
+	return payload
+}
+
+func uint16ToBytes(in uint16) []byte {
+	out := make([]byte, 2)
+	binary.BigEndian.PutUint16(out, in)
+	return out
 }

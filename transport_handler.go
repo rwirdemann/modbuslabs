@@ -6,9 +6,9 @@ import (
 	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
 
-type HandleMasterCallback func(ctx context.Context, r modbus.Reader)
+type HandleMasterConnectionCallback func(ctx context.Context, conn modbus.Connection)
 
 type TransportHandler interface {
-	Start(ctx context.Context, cb HandleMasterCallback) (err error)
+	Start(ctx context.Context, cb HandleMasterConnectionCallback) (err error)
 	Stop() error
 }
