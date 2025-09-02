@@ -36,51 +36,51 @@ func (p PDU) String() string {
 // 00 01      - Start Address (Register 1)
 // 00 02      - Quantity (2 Register)
 //
-// Returns the [PDU] and transaction on success.
-func ReadMBAPFrame(conn io.Reader) (*PDU, uint16, error) {
+// Returns the header, [PDU] and transaction id on success.
+func ReadMBAPFrame(conn io.Reader) ([]byte, *PDU, uint16, error) {
 
 	// read the MBAP header
-	rxbuf := make([]byte, MBAPHeaderLength)
-	_, err := io.ReadFull(conn, rxbuf)
+	header := make([]byte, MBAPHeaderLength)
+	_, err := io.ReadFull(conn, header)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 
 	// decode the transaction identifier as unique request and response identifier
-	txid := binary.BigEndian.Uint16(rxbuf[0:2])
+	txid := binary.BigEndian.Uint16(header[0:2])
 
 	// decode the protocol identifier
-	protocolId := binary.BigEndian.Uint16(rxbuf[2:4])
+	protocolId := binary.BigEndian.Uint16(header[2:4])
 
 	// store the source unit id
-	unitId := rxbuf[6]
+	unitId := header[6]
 
 	// determine how many more bytes we need to read
-	bytesNeeded := binary.BigEndian.Uint16(rxbuf[4:6])
+	bytesNeeded := binary.BigEndian.Uint16(header[4:6])
 
 	// the byte count includes the unit ID field, which we already have
 	bytesNeeded--
 
 	// never read more than the max allowed frame length
 	if int(bytesNeeded)+MBAPHeaderLength > MaxFrameLength {
-		return nil, 0, errors.New("protocol error: maxFrameLength exceeded")
+		return nil, nil, 0, errors.New("protocol error: maxFrameLength exceeded")
 	}
 
 	// an MBAP length of 0 is illegal
 	if bytesNeeded <= 0 {
-		return nil, 0, errors.New("protocol error: length is equal or less 0")
+		return nil, nil, 0, errors.New("protocol error: length is equal or less 0")
 	}
 
 	// read the PDU
-	rxbuf = make([]byte, bytesNeeded)
+	rxbuf := make([]byte, bytesNeeded)
 	_, err = io.ReadFull(conn, rxbuf)
 	if err != nil {
-		return nil, 0, err
+		return nil, nil, 0, err
 	}
 
 	// validate protocol id
 	if protocolId != 0x0000 {
-		return nil, 0, errors.New("protocol error: invalid protocol id")
+		return nil, nil, 0, errors.New("protocol error: invalid protocol id")
 	}
 
 	// store unit id, function code and payload in the PDU object
@@ -90,7 +90,7 @@ func ReadMBAPFrame(conn io.Reader) (*PDU, uint16, error) {
 		Payload:      rxbuf[1:],
 	}
 
-	return pdu, txid, nil
+	return header, pdu, txid, nil
 }
 
 // AssembleMBAPFrame turns a PDU into an MBAP frame (MBAP header + PDU) and returns it as bytes.

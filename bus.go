@@ -10,11 +10,12 @@ import (
 )
 
 type Bus struct {
-	handler TransportHandler
+	handler      TransportHandler
+	protocolPort ProtocolPort
 }
 
-func NewBus(handler TransportHandler) *Bus {
-	return &Bus{handler: handler}
+func NewBus(handler TransportHandler, protocolPort ProtocolPort) *Bus {
+	return &Bus{handler: handler, protocolPort: protocolPort}
 }
 
 func (m *Bus) Start(ctx context.Context) error {
@@ -31,7 +32,7 @@ func (h *Bus) handleMasterConnection(ctx context.Context, conn modbus.Connection
 		case <-ctx.Done():
 			return
 		default:
-			pdu, txnId, err := modbus.ReadMBAPFrame(conn)
+			header, pdu, txnId, err := modbus.ReadMBAPFrame(conn)
 			if err != nil {
 				if err == io.EOF {
 					slog.Debug("client disconnected", "remote addr", conn.Name())
@@ -42,6 +43,7 @@ func (h *Bus) handleMasterConnection(ctx context.Context, conn modbus.Connection
 				continue
 			}
 			slog.Debug("MBAP header received", "pdu", pdu, "txid", txnId)
+			h.protocolPort.Info(fmt.Sprintf("req % X % X % X", header, pdu.FunctionCode, pdu.Payload))
 			if pdu.FunctionCode != modbus.FCWriteSingleRegister {
 				slog.Error("function code not implemented", "fc", pdu.FunctionCode)
 				continue
@@ -52,6 +54,7 @@ func (h *Bus) handleMasterConnection(ctx context.Context, conn modbus.Connection
 				continue
 			}
 			slog.Debug(fmt.Sprintf("MBAP response written: % X", payload))
+			h.protocolPort.Info(fmt.Sprintf("rsp % X", payload))
 		}
 	}
 }

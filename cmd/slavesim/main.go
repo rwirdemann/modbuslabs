@@ -4,26 +4,37 @@ import (
 	"context"
 	"flag"
 	"log/slog"
+	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/rwirdemann/modbuslabs"
+	"github.com/rwirdemann/modbuslabs/console"
 	"github.com/rwirdemann/modbuslabs/tcp"
 )
 
 func main() {
 	debug := flag.Bool("debug", false, "set log level to debug")
+	out := flag.String("out", "console", "the output channel (console)")
 	flag.Parse()
 
 	if *debug {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
 	}
 
+	var protocolPort modbuslabs.ProtocolPort
+	if *out == "console" {
+		protocolPort = console.ProtocolAdapter{}
+	} else {
+		flag.Usage()
+		os.Exit(1)
+	}
+
 	handler, err := tcp.NewHandler("tcp://localhost:5002")
 	if err != nil {
 		panic(err)
 	}
-	modbus := modbuslabs.NewBus(handler)
+	modbus := modbuslabs.NewBus(handler, protocolPort)
 	ctx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	if err := modbus.Start(ctx); err != nil {
 		panic(err)
