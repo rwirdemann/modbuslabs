@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"time"
 
 	bmodbus "github.com/goburrow/modbus"
@@ -13,6 +14,7 @@ import (
 func main() {
 	addr := flag.String("address", "0x000", "0x0000 to 0x270F")
 	value := flag.Int("value", 0, "the value as int")
+	fc := flag.Int("fc", int(modbus.FCWriteSingleRegister), "the modbus function code (6)")
 	flag.Parse()
 
 	addrHex, err := modbus.NewHex(*addr)
@@ -31,9 +33,14 @@ func main() {
 	defer handler.Close()
 
 	client := bmodbus.NewClient(handler)
-	bb, err := client.WriteSingleRegister(addrHex.Uint16(), uint16(*value))
-	if err != nil {
-		log.Fatal(err)
+	switch *fc {
+	case int(modbus.FCWriteSingleRegister):
+		bb, err := client.WriteSingleRegister(addrHex.Uint16(), uint16(*value))
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("response: %v", bb)
+	default:
+		slog.Error("unknown function code", "fc", *fc)
 	}
-	fmt.Printf("response: %v", bb)
 }
