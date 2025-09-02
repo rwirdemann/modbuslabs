@@ -34,14 +34,14 @@ func (h *Bus) handleMasterConnection(ctx context.Context, conn modbus.Connection
 			pdu, txnId, err := modbus.ReadMBAPFrame(conn)
 			if err != nil {
 				if err == io.EOF {
-					slog.Info("client disconnected", "remote addr", conn.Name())
+					slog.Debug("client disconnected", "remote addr", conn.Name())
 					conn.Close()
 					return
 				}
 				slog.Error("failed to read MBAP header", "error", err)
 				continue
 			}
-			slog.Info("MBAP header received", "pdu", pdu, "txid", txnId)
+			slog.Debug("MBAP header received", "pdu", pdu, "txid", txnId)
 			if pdu.FunctionCode != modbus.FCWriteSingleRegister {
 				slog.Error("function code not implemented", "fc", pdu.FunctionCode)
 				continue
@@ -51,7 +51,7 @@ func (h *Bus) handleMasterConnection(ctx context.Context, conn modbus.Connection
 				slog.Error("failed to write response")
 				continue
 			}
-			slog.Info(fmt.Sprintf("MBAP response written: % X", payload))
+			slog.Debug(fmt.Sprintf("MBAP response written: % X", payload))
 		}
 	}
 }
