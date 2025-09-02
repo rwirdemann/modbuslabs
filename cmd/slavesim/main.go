@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"flag"
+	"log/slog"
 	"os/signal"
 	"syscall"
 
@@ -10,6 +12,13 @@ import (
 )
 
 func main() {
+	debug := flag.Bool("debug", false, "set log level to debug")
+	flag.Parse()
+
+	if *debug {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
+
 	handler, err := tcp.NewHandler("tcp://localhost:5002")
 	if err != nil {
 		panic(err)
