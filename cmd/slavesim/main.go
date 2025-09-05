@@ -10,12 +10,14 @@ import (
 
 	"github.com/rwirdemann/modbuslabs"
 	"github.com/rwirdemann/modbuslabs/console"
+	"github.com/rwirdemann/modbuslabs/rtu"
 	"github.com/rwirdemann/modbuslabs/tcp"
 )
 
 func main() {
 	debug := flag.Bool("debug", false, "set log level to debug")
 	out := flag.String("out", "console", "the output channel (console)")
+	transport := flag.String("transport", "tcp", "transport protocol (tcp|rtu)")
 	flag.Parse()
 
 	if *debug {
@@ -30,10 +32,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler, err := tcp.NewHandler("tcp://localhost:5002")
-	if err != nil {
-		panic(err)
+	var handler modbuslabs.TransportHandler
+	switch *transport {
+	case "tcp":
+		var err error
+		handler, err = tcp.NewHandler("tcp://localhost:5002")
+		if err != nil {
+			panic(err)
+		}
+	case "rtu":
+		handler = rtu.NewHandler("/tmp/virtualcom0")
+	default:
+		flag.Usage()
+		os.Exit(1)
 	}
+
 	modbus := modbuslabs.NewBus(handler, protocolPort)
 	ctx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	if err := modbus.Start(ctx); err != nil {
