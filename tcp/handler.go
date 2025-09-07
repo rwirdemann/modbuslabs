@@ -3,11 +3,13 @@ package tcp
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"strings"
 
 	"github.com/rwirdemann/modbuslabs"
+	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
 
 type Connection struct {
@@ -35,24 +37,25 @@ func (r Connection) Name() string {
 }
 
 type Handler struct {
-	url      string
-	listener net.Listener
+	url          string
+	listener     net.Listener
+	protocolPort modbuslabs.ProtocolPort
 }
 
-func NewHandler(url string) (*Handler, error) {
+func NewHandler(url string, protocolPort modbuslabs.ProtocolPort) (*Handler, error) {
 	splitURL := strings.SplitN(url, "://", 2)
 	if len(splitURL) == 2 {
-		return &Handler{url: splitURL[1]}, nil
+		return &Handler{url: splitURL[1], protocolPort: protocolPort}, nil
 	}
 	return nil, fmt.Errorf("invalid url format %s", url)
 }
 
-func (h *Handler) Start(ctx context.Context, cb modbuslabs.HandleMasterConnectionCallback) (err error) {
+func (h *Handler) Start(ctx context.Context, processPDU modbuslabs.ProcessPDUCallback) (err error) {
 	h.listener, err = net.Listen("tcp", h.url)
 	if err != nil {
 		return fmt.Errorf("failed to start TCP listener: %w", err)
 	}
-	go h.acceptClients(ctx, cb)
+	go h.startRequestCycle(ctx, processPDU)
 	slog.Debug("TCP listener started", "url", h.url)
 	return nil
 }
@@ -65,7 +68,7 @@ func (h *Handler) Stop() error {
 	return nil
 }
 
-func (h *Handler) acceptClients(ctx context.Context, cb modbuslabs.HandleMasterConnectionCallback) {
+func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.ProcessPDUCallback) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -74,8 +77,31 @@ func (h *Handler) acceptClients(ctx context.Context, cb modbuslabs.HandleMasterC
 			conn, err := h.listener.Accept()
 			if err == nil {
 				slog.Debug("client connected", "remote addr", conn.RemoteAddr())
-				go cb(ctx, NewConnection(conn))
+				h.processRequest(conn, processPDU)
 			}
 		}
 	}
+}
+
+func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDUCallback) error {
+	header, pdu, txnId, err := modbus.ReadMBAPFrame(conn)
+	if err != nil {
+		if err == io.EOF {
+			slog.Debug("client disconnected", "remote addr", conn.RemoteAddr())
+			conn.Close()
+		}
+		return err
+	}
+	slog.Debug("MBAP header received", "pdu", pdu, "txid", txnId)
+	h.protocolPort.Info(fmt.Sprintf("req % X % X % X", header, pdu.FunctionCode, pdu.Payload))
+
+	processPDU(3, *pdu)
+
+	payload := modbus.AssembleMBAPFrame(txnId, pdu)
+	if _, err := conn.Write(payload); err != nil {
+		return err
+	}
+	slog.Debug(fmt.Sprintf("MBAP response written: % X", payload))
+	h.protocolPort.Info(fmt.Sprintf("rsp % X", payload))
+	return nil
 }

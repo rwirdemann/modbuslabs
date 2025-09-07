@@ -9,6 +9,7 @@ import (
 
 	"github.com/goburrow/serial"
 	"github.com/rwirdemann/modbuslabs"
+	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
 
 type Handler struct {
@@ -20,7 +21,7 @@ func NewHandler(url string) *Handler {
 	return &Handler{url: url}
 }
 
-func (h *Handler) Start(ctx context.Context, cb modbuslabs.HandleMasterConnectionCallback) (err error) {
+func (h *Handler) Start(ctx context.Context, processPDU modbuslabs.ProcessPDUCallback) (err error) {
 	config := &serial.Config{
 		Address:  h.url,
 		BaudRate: 9600,
@@ -35,12 +36,12 @@ func (h *Handler) Start(ctx context.Context, cb modbuslabs.HandleMasterConnectio
 		return fmt.Errorf("failed to open serial port: %w", err)
 	}
 
-	go h.handleRequest(ctx, cb)
+	go h.startRequestCycle(ctx, processPDU)
 	slog.Debug("RTU listener started", "url", h.url)
 	return nil
 }
 
-func (h *Handler) handleRequest(ctx context.Context, cb modbuslabs.HandleMasterConnectionCallback) {
+func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.ProcessPDUCallback) {
 	buffer := make([]byte, 256)
 	for {
 		select {
@@ -49,25 +50,24 @@ func (h *Handler) handleRequest(ctx context.Context, cb modbuslabs.HandleMasterC
 		default:
 			n, err := h.serialPort.Read(buffer)
 			if err != nil {
-				if err.Error() != "EOF" {
+				if err.Error() != "EOF" && err.Error() != "serial: timeout" {
 					slog.Error("Error reading from serial port", "err", err)
 				}
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}
 			if n > 0 {
+				pdu := modbus.PDU{}
 				data := buffer[:n]
-				slog.Debug("Received data from serial port", "n", n, "data", data)
+				slog.Debug("Received data from serial port", "n", n, "data", fmt.Sprintf("% X", data))
 				if len(data) < 4 {
 					slog.Error("Received bytes < 4")
 					continue
 				}
-
-				slaveID := data[0]
-				functionCode := data[1]
-				switch functionCode {
+				pdu.UnitId = data[0]
+				pdu.FunctionCode = data[1]
+				switch pdu.FunctionCode {
 				case 0x06:
-
 					if len(data) < 8 {
 						slog.Error("Received bytes < 8")
 						continue
@@ -82,9 +82,9 @@ func (h *Handler) handleRequest(ctx context.Context, cb modbuslabs.HandleMasterC
 					}
 
 					regAddr := binary.BigEndian.Uint16(data[2:4])
-					value := binary.BigEndian.Uint16(data[4:6])
+					pdu.Payload = data[4:6]
 
-					slog.Debug("received data", "slaveID", slaveID, "addr", regAddr, "value", value)
+					processPDU(regAddr, pdu)
 
 					// Echo back the request as response
 					h.serialPort.Write(data)
@@ -102,7 +102,7 @@ func calculateCRC(data []byte) uint16 {
 	crc := uint16(0xFFFF)
 	for _, b := range data {
 		crc ^= uint16(b)
-		for i := 0; i < 8; i++ {
+		for range 8 {
 			if crc&0x0001 != 0 {
 				crc = (crc >> 1) ^ 0xA001
 			} else {
