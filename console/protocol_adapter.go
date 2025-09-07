@@ -10,5 +10,5 @@ type ProtocolAdapter struct {
 
 func (p ProtocolAdapter) Info(msg string) {
 	ts := time.Now().Format(time.DateTime)
-	fmt.Printf("%s: %s\n", ts, msg)
+	fmt.Printf("%s %s\n", ts, msg)
 }

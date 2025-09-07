@@ -93,7 +93,7 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 		return err
 	}
 	slog.Debug("MBAP header received", "pdu", pdu, "txid", txnId)
-	h.protocolPort.Info(fmt.Sprintf("req % X % X % X", header, pdu.FunctionCode, pdu.Payload))
+	h.protocolPort.Info(fmt.Sprintf("TX % X % X % X", header, pdu.FunctionCode, pdu.Payload))
 
 	processPDU(3, *pdu)
 
@@ -102,6 +102,6 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 		return err
 	}
 	slog.Debug(fmt.Sprintf("MBAP response written: % X", payload))
-	h.protocolPort.Info(fmt.Sprintf("rsp % X", payload))
+	h.protocolPort.Info(fmt.Sprintf("RX % X", payload))
 	return nil
 }

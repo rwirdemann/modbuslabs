@@ -41,7 +41,7 @@ func main() {
 			panic(err)
 		}
 	case "rtu":
-		handler = rtu.NewHandler("/tmp/virtualcom0")
+		handler = rtu.NewHandler("/tmp/virtualcom0", protocolPort)
 	default:
 		flag.Usage()
 		os.Exit(1)
