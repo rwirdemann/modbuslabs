@@ -6,9 +6,9 @@ import (
 	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
 
-type HandleMasterConnectionCallback func(ctx context.Context, conn modbus.Connection)
+type ProcessPDUCallback func(registerAddress uint16, pdu modbus.PDU)
 
 type TransportHandler interface {
-	Start(ctx context.Context, cb HandleMasterConnectionCallback) (err error)
+	Start(ctx context.Context, processPDU ProcessPDUCallback) (err error)
 	Stop() error
 }
