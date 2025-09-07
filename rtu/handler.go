@@ -13,12 +13,13 @@ import (
 )
 
 type Handler struct {
-	serialPort serial.Port
-	url        string
+	serialPort   serial.Port
+	url          string
+	protocolPort modbuslabs.ProtocolPort
 }
 
-func NewHandler(url string) *Handler {
-	return &Handler{url: url}
+func NewHandler(url string, protocolPort modbuslabs.ProtocolPort) *Handler {
+	return &Handler{url: url, protocolPort: protocolPort}
 }
 
 func (h *Handler) Start(ctx context.Context, processPDU modbuslabs.ProcessPDUCallback) (err error) {
@@ -84,10 +85,12 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 					regAddr := binary.BigEndian.Uint16(data[2:4])
 					pdu.Payload = data[4:6]
 
+					h.protocolPort.Info(fmt.Sprintf("TX % X", data))
 					processPDU(regAddr, pdu)
 
 					// Echo back the request as response
 					h.serialPort.Write(data)
+					h.protocolPort.Info(fmt.Sprintf("RX % X", data))
 				}
 			}
 		}
@@ -95,7 +98,8 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 }
 
 func (h *Handler) Stop() error {
-	return nil
+	slog.Debug("Closing serial port")
+	return h.serialPort.Close()
 }
 
 func calculateCRC(data []byte) uint16 {

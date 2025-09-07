@@ -11,7 +11,7 @@ classDiagram
     namespace modbuslabs {
         class Bus {
             url: string
-            handleMasterConnection(modbus.Connection)
+            processPDU(registerAddress, modbus.PDU)
         }
 
         class Slave {
@@ -43,13 +43,15 @@ classDiagram
 
 
     namespace modbus {
-        class modbus.Connection {
-            <<interface>>
-        }
+        class modbus.PDU
     }
 
     namespace tui {
         class tui.Model
+    }
+
+    namespace console {
+        class console.ProtocolAdapter
     }
 
     namespace memory {
@@ -62,13 +64,15 @@ classDiagram
     Bus "1" --> "0..*" Slave
     ControlPort <|.. Bus
     Bus ..> ProtocolPort
-    Bus ..> modbus.Connection
     Bus --> TransportHandler
     Slave --> RegisterMap
+    Bus ..> modbus.PDU: uses
 
 
     tui.Model ..> ControlPort : uses
     ProtocolPort <|.. tui.Model : implements
+
+    ProtocolPort <|.. console.ProtocolAdapter: implements
 
     RegisterMap <|.. memory.RegisterMap
 

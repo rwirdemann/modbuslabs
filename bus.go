@@ -2,8 +2,6 @@ package modbuslabs
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"log/slog"
 
 	"github.com/rwirdemann/modbuslabs/pkg/modbus"
@@ -19,7 +17,7 @@ func NewBus(handler TransportHandler, protocolPort ProtocolPort) *Bus {
 }
 
 func (m *Bus) Start(ctx context.Context) error {
-	return m.handler.Start(ctx, m.handleMasterConnection, m.processPDU)
+	return m.handler.Start(ctx, m.processPDU)
 }
 
 func (m *Bus) Stop() error {
