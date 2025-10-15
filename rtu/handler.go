@@ -12,12 +12,14 @@ import (
 	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
 
+// Start starts the RTU handler.
 type Handler struct {
 	serialPort   serial.Port
 	url          string
 	protocolPort modbuslabs.ProtocolPort
 }
 
+// NewHandler creates a new RTU handler.
 func NewHandler(url string, protocolPort modbuslabs.ProtocolPort) *Handler {
 	return &Handler{url: url, protocolPort: protocolPort}
 }
@@ -97,9 +99,13 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 	}
 }
 
+// Stop stops the handler.
 func (h *Handler) Stop() error {
 	slog.Debug("Closing serial port")
-	return h.serialPort.Close()
+	if h.serialPort != nil {
+		h.serialPort.Close()
+	}
+	return nil
 }
 
 func calculateCRC(data []byte) uint16 {

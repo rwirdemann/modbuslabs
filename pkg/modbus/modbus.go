@@ -11,7 +11,9 @@ const (
 	MBAPHeaderLength = 7
 	MaxFrameLength   = 260
 
-	FCWriteSingleRegister uint8 = 0x06
+	FC2ReadDiscreteInput   uint8 = 0x02
+	FC4ReadInputRegisters  uint8 = 0x04
+	FC6WriteSingleRegister uint8 = 0x06
 )
 
 // PDU is a struct to represent a Modbus Protocol Data unit.
@@ -96,13 +98,13 @@ func ReadMBAPFrame(conn io.Reader) ([]byte, *PDU, uint16, error) {
 // AssembleMBAPFrame turns a PDU into an MBAP frame (MBAP header + PDU) and returns it as bytes.
 func AssembleMBAPFrame(txnId uint16, p *PDU) []byte {
 	// transaction identifier
-	payload := uint16ToBytes(txnId)
+	payload := Uint16ToBytes(txnId)
 
 	// protocol identifier (always 0x0000)
 	payload = append(payload, 0x00, 0x00)
 
 	// length (covers unit identifier + function code + payload fields)
-	payload = append(payload, uint16ToBytes(uint16(2+len(p.Payload)))...)
+	payload = append(payload, Uint16ToBytes(uint16(2+len(p.Payload)))...)
 
 	// unit identifier
 	payload = append(payload, p.UnitId)
@@ -116,8 +118,31 @@ func AssembleMBAPFrame(txnId uint16, p *PDU) []byte {
 	return payload
 }
 
-func uint16ToBytes(in uint16) []byte {
+func Uint16ToBytes(in uint16) []byte {
 	out := make([]byte, 2)
 	binary.BigEndian.PutUint16(out, in)
 	return out
+}
+
+func BytesToUint16(in []byte) uint16 {
+	return binary.BigEndian.Uint16(in)
+}
+
+func EncodeBools(in []bool) (out []byte) {
+	var byteCount uint
+	var i uint
+
+	byteCount = uint(len(in)) / 8
+	if len(in)%8 != 0 {
+		byteCount++
+	}
+
+	out = make([]byte, byteCount)
+	for i = range uint(len(in)) {
+		if in[i] {
+			out[i/8] |= (0x01 << (i % 8))
+		}
+	}
+
+	return
 }
