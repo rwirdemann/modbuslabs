@@ -36,7 +36,7 @@ func main() {
 	switch *transport {
 	case "tcp":
 		var err error
-		handler, err = tcp.NewHandler("tcp://localhost:5002", protocolPort)
+		handler, err = tcp.NewHandler("tcp://localhost:502", protocolPort)
 		if err != nil {
 			panic(err)
 		}

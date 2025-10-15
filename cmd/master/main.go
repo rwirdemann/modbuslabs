@@ -14,8 +14,8 @@ import (
 func main() {
 	addr := flag.String("address", "0x000", "0x0000 to 0x270F")
 	value := flag.Int("value", 0, "the value as int")
-	mode := flag.String("mode", "tcp", "the modbus mode (tcp|rtu)")
-	fc := flag.Int("fc", int(modbus.FCWriteSingleRegister), "the modbus function code (6)")
+	transport := flag.String("transport", "tcp", "the modbus mode (tcp|rtu)")
+	fc := flag.Int("fc", int(modbus.FC6WriteSingleRegister), "the modbus function code (6)")
 	flag.Parse()
 
 	addrHex, err := modbus.NewHex(*addr)
@@ -24,8 +24,8 @@ func main() {
 	}
 
 	var handler bmodbus.ClientHandler
-	if *mode == "tcp" {
-		h := bmodbus.NewTCPClientHandler("localhost:5002")
+	if *transport == "tcp" {
+		h := bmodbus.NewTCPClientHandler("localhost:502")
 		h.Timeout = 1 * time.Second
 		h.SlaveId = 101
 		err = h.Connect()
@@ -35,7 +35,7 @@ func main() {
 		defer h.Close()
 		handler = h
 	}
-	if *mode == "rtu" {
+	if *transport == "rtu" {
 		h := bmodbus.NewRTUClientHandler("/tmp/virtualcom1")
 		h.Timeout = 5 * time.Second
 		h.SlaveId = 101
@@ -53,12 +53,13 @@ func main() {
 
 	client := bmodbus.NewClient(handler)
 	switch *fc {
-	case int(modbus.FCWriteSingleRegister):
+	case int(modbus.FC6WriteSingleRegister):
 		bb, err := client.WriteSingleRegister(addrHex.Uint16(), uint16(*value))
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("response: %v", bb)
+		ts := time.Now().Format(time.DateTime)
+		fmt.Printf("%s % X\n", ts, bb)
 	default:
 		slog.Error("unknown function code", "fc", *fc)
 	}
