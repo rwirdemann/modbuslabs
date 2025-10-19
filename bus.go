@@ -8,10 +8,16 @@ import (
 	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
 
+type slave struct {
+	unitID    uint8
+	connected bool
+}
+
 // Bus represents a Modbus bus.
 type Bus struct {
 	handler      TransportHandler
 	protocolPort ProtocolPort
+	slaves       map[uint8]*slave
 	registers    map[uint8]map[uint16]uint16 // map[unitID]map[registerAddr]value
 }
 
@@ -20,6 +26,7 @@ func NewBus(handler TransportHandler, protocolPort ProtocolPort) *Bus {
 	return &Bus{
 		handler:      handler,
 		protocolPort: protocolPort,
+		slaves:       make(map[uint8]*slave),
 		registers:    make(map[uint8]map[uint16]uint16),
 	}
 }
@@ -35,6 +42,11 @@ func (m *Bus) Stop() error {
 }
 
 func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
+	if slave, exists := h.slaves[pdu.UnitId]; !exists || !slave.connected {
+		h.protocolPort.Info(fmt.Sprintf("slave %d does not exist or is offline", pdu.UnitId))
+		return nil
+	}
+
 	addr := modbus.BytesToUint16(pdu.Payload[0:2])
 
 	if pdu.FunctionCode == modbus.FC2ReadDiscreteInput {
@@ -234,17 +246,26 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 }
 
 func (h *Bus) AddSlave(unitID uint8) {
-
+	h.slaves[unitID] = &slave{}
 }
 
 func (h *Bus) ConnectSlave(unitID uint8) {
-
+	h.slaves[unitID].connected = true
 }
 
 func (h *Bus) DisconnectSlave(unitID uint8) {
-
+	h.slaves[unitID].connected = false
 }
 
 func (h *Bus) Status() string {
-	return "simulator is running"
+	var status string
+	status = "Slaves:\n"
+	for unitID, slave := range h.slaves {
+		connectStatus := "disconnected"
+		if slave.connected {
+			connectStatus = "connected"
+		}
+		status += fmt.Sprintf("  UnitID %d: %s\n", unitID, connectStatus)
+	}
+	return status
 }
