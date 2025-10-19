@@ -16,6 +16,7 @@ func main() {
 	addr := flag.String("address", "0x000", "0x0000 to 0x270F")
 	value := flag.Int("value", 0, "the value as int")
 	valueFloat := flag.Float64("float", 0, "the value as float")
+	boolValue := flag.Bool("bool", false, "the value as bool")
 	transport := flag.String("transport", "tcp", "the modbus mode (tcp|rtu)")
 	quantity := flag.Int("quantity", 1, "number of registers to read (for FC4)")
 	fc := flag.Int("fc", int(modbus.FC6WriteSingleRegister), "the modbus function code (2|4|5|6|16)")
@@ -97,7 +98,7 @@ func main() {
 	case int(modbus.FC5WriteSingleCoil):
 		// Convert int value to Modbus coil format: 0xFF00 for ON, 0x0000 for OFF
 		var coilValue uint16
-		if *value != 0 {
+		if *boolValue {
 			coilValue = 0xFF00
 		} else {
 			coilValue = 0x0000
