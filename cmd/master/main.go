@@ -109,7 +109,7 @@ func main() {
 		}
 		ts := time.Now().Format(time.DateTime)
 		fmt.Printf("%s % X\n", ts, bb)
-		fmt.Printf("Coil 0x%04X set to %v\n", addrHex.Uint16(), *value != 0)
+		fmt.Printf("Coil 0x%04X set to %v\n", addrHex.Uint16(), *boolValue)
 	case int(modbus.FC6WriteSingleRegister):
 		bb, err := client.WriteSingleRegister(addrHex.Uint16(), uint16(*value))
 		if err != nil {

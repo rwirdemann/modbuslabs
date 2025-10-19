@@ -26,7 +26,7 @@ func main() {
 
 	var protocolPort modbuslabs.ProtocolPort
 	if *out == "console" {
-		protocolPort = console.ProtocolAdapter{}
+		protocolPort = &console.ProtocolAdapter{}
 	} else {
 		flag.Usage()
 		os.Exit(1)
@@ -56,7 +56,7 @@ func main() {
 	}
 	defer modbus.Stop()
 
-	driver := console.NewKeyboardAdapter(modbus)
+	driver := console.NewKeyboardAdapter(modbus, protocolPort)
 	go driver.Start(cancel)
 
 	<-ctx.Done()

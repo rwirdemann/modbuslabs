@@ -5,33 +5,85 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
+
+	"github.com/rwirdemann/modbuslabs"
 )
 
 type KeyboardAdapter struct {
-	simulator simulatorPort
+	simulator    simulatorPort
+	protocolPort modbuslabs.ProtocolPort
 }
 
-func NewKeyboardAdapter(slaveSimulator simulatorPort) *KeyboardAdapter {
-	return &KeyboardAdapter{simulator: slaveSimulator}
+func NewKeyboardAdapter(slaveSimulator simulatorPort, protocolPort modbuslabs.ProtocolPort) *KeyboardAdapter {
+	return &KeyboardAdapter{simulator: slaveSimulator, protocolPort: protocolPort}
 }
 
 func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Println("Enter 'h' followed by <enter> for help...")
+	a.protocolPort.Println("Enter 'h' followed by <enter> for help...")
 	for scanner.Scan() {
 		input := scanner.Text()
-		switch input {
+		parts := strings.Fields(input)
+		if len(parts) == 0 {
+			continue
+		}
+
+		command := parts[0]
+		switch command {
 		case "quit", "exit", "q":
-			fmt.Println("Terminating simulator...")
+			a.protocolPort.Println("Terminating simulator...")
 			cancel()
 			return
 		case "status", "s":
-			fmt.Println(a.simulator.Status())
+			a.protocolPort.Println(a.simulator.Status())
+		case "mute", "m":
+			a.protocolPort.Mute()
+		case "unmute", "u":
+			a.protocolPort.Unmute()
+		case "add", "a":
+			if len(parts) < 2 {
+				a.protocolPort.Println("Error: add command requires a unit ID (e.g., 'add 1')")
+				continue
+			}
+			unitID, err := strconv.ParseUint(parts[1], 10, 8)
+			if err != nil {
+				a.protocolPort.Println(fmt.Sprintf("Error: invalid unit ID '%s', must be a number between 0-255", parts[1]))
+				continue
+			}
+			a.simulator.AddSlave(uint8(unitID))
+			a.protocolPort.Println(fmt.Sprintf("Added slave with unit ID %d", unitID))
+		case "connect", "c":
+			if len(parts) < 2 {
+				a.protocolPort.Println("Error: connect command requires a unit ID (e.g., 'connect 1')")
+				continue
+			}
+			unitID, err := strconv.ParseUint(parts[1], 10, 8)
+			if err != nil {
+				a.protocolPort.Println(fmt.Sprintf("Error: invalid unit ID '%s', must be a number between 0-255", parts[1]))
+				continue
+			}
+			a.simulator.ConnectSlave(uint8(unitID))
+			a.protocolPort.Println(fmt.Sprintf("Connected slave with unit ID %d", unitID))
+		case "disconnect", "d":
+			if len(parts) < 2 {
+				a.protocolPort.Println("Error: disconnect command requires a unit ID (e.g., 'connect 1')")
+				continue
+			}
+			unitID, err := strconv.ParseUint(parts[1], 10, 8)
+			if err != nil {
+				a.protocolPort.Println(fmt.Sprintf("Error: invalid unit ID '%s', must be a number between 0-255", parts[1]))
+				continue
+			}
+			a.simulator.DisconnectSlave(uint8(unitID))
+			a.protocolPort.Println(fmt.Sprintf("Disconnected slave with unit ID %d", unitID))
 		case "help", "h":
-			fmt.Println("Commands:")
-			fmt.Println("  quit/exit/q - Quit simulator")
-			fmt.Println("  status/s    - Show simulator status")
-			fmt.Println("  help        - Show help")
+			a.protocolPort.Println("Commands:")
+			a.protocolPort.Println("  quit/exit/q    - Quit simulator")
+			a.protocolPort.Println("  status/s       - Show simulator status")
+			a.protocolPort.Println("  add/a <unitID> - Add slave")
+			a.protocolPort.Println("  help           - Show help")
 		default:
 			fmt.Printf("Unknown command: %s (use 'h' for help)\n", input)
 		}
@@ -40,4 +92,7 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 
 type simulatorPort interface {
 	Status() string
+	AddSlave(unitID uint8)
+	ConnectSlave(unitID uint8)
+	DisconnectSlave(unitID uint8)
 }
