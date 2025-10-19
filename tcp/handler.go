@@ -102,7 +102,6 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 	slog.Debug("MBAP header received", "pdu", pdu, "txid", txnId)
 	h.protocolPort.Info(fmt.Sprintf("TX % X % X % X", header, pdu.FunctionCode, pdu.Payload))
 
-	slog.Info("Handling", "fc", pdu.FunctionCode)
 	res := processPDU(*pdu)
 
 	if res != nil {

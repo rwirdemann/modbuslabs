@@ -36,10 +36,10 @@ func (m *Bus) Stop() error {
 
 func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 	addr := modbus.BytesToUint16(pdu.Payload[0:2])
-	quantity := modbus.BytesToUint16(pdu.Payload[2:4])
-	slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "quantitiy", quantity, "pdu", pdu)
 
 	if pdu.FunctionCode == modbus.FC2ReadDiscreteInput {
+		quantity := modbus.BytesToUint16(pdu.Payload[2:4])
+		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "quantitiy", quantity, "pdu", pdu)
 		res := &modbus.PDU{
 			UnitId:       pdu.UnitId,
 			FunctionCode: pdu.FunctionCode,
@@ -84,6 +84,8 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 	}
 
 	if pdu.FunctionCode == modbus.FC4ReadInputRegisters {
+		quantity := modbus.BytesToUint16(pdu.Payload[2:4])
+		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "quantitiy", quantity, "pdu", pdu)
 		byteCount := uint8(quantity * 2)
 		res := &modbus.PDU{
 			UnitId:       pdu.UnitId,
@@ -138,8 +140,8 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 	}
 
 	if pdu.FunctionCode == modbus.FC5WriteSingleCoil {
-		// FC5 payload format: [coilAddr(2 bytes)][value(2 bytes)]
-		// value is 0xFF00 for ON, 0x0000 for OFF
+		// FC5 payload format: [coilAddr(2 bytes)][value(2 bytes)]. Value is 0xFF00 for ON, 0x0000 for OFF
+		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "pdu", pdu)
 		value := modbus.BytesToUint16(pdu.Payload[2:4])
 
 		// Initialize unit's register map if it doesn't exist
@@ -157,6 +159,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 			FunctionCode: pdu.FunctionCode,
 			Payload:      pdu.Payload[0:4], // Echo back address and value
 		}
+		h.protocolPort.Info(fmt.Sprintf("FC=%X UnitID=%d Address=%X Value=%X", pdu.FunctionCode, pdu.UnitId, addr, value))
 		return res
 	}
 
@@ -185,6 +188,8 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 	if pdu.FunctionCode == modbus.FC16WriteMultipleRegisters {
 		// FC16 payload format: [startAddr(2 bytes)][quantity(2 bytes)][byteCount(1 byte)][values(N bytes)]
 		// addr and quantity already extracted at the beginning
+		quantity := modbus.BytesToUint16(pdu.Payload[2:4])
+		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "quantitiy", quantity, "pdu", pdu)
 		byteCount := pdu.Payload[4]
 
 		// Validate payload length
