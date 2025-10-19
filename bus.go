@@ -92,26 +92,8 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		}
 		res.Payload[0] = byteCount
 
-		// Timesync hack - handle first
-		timeregAddr := []byte{0x8F, 0xFC}
-		if addr == modbus.BytesToUint16(timeregAddr) {
-			var syncTime uint64 = 2815470101985099801 // 2025-08-14 15:36
-
-			// Split into 4 words (16-bit each, big endian)
-			word0 := uint16((syncTime >> 48) & 0xFFFF)
-			word1 := uint16((syncTime >> 32) & 0xFFFF)
-			word2 := uint16((syncTime >> 16) & 0xFFFF)
-			word3 := uint16(syncTime & 0xFFFF)
-
-			// Copy the 4 words into the first 8 bytes of res.payload
-			copy(res.Payload[1:3], modbus.Uint16ToBytes(word0))
-			copy(res.Payload[3:5], modbus.Uint16ToBytes(word1))
-			copy(res.Payload[5:7], modbus.Uint16ToBytes(word2))
-			copy(res.Payload[7:9], modbus.Uint16ToBytes(word3))
-			return res
-		}
-
 		// Read values from registers map
+		payloadIndex := 1 // Start after byte count
 		for i := uint16(0); i < quantity; i++ {
 			currentAddr := addr + i
 			var value uint16
@@ -129,8 +111,27 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 				slog.Debug("no registers for unit", "unitID", pdu.UnitId)
 			}
 
-			// Append register value as 2 bytes (big endian)
-			res.Payload = append(res.Payload, modbus.Uint16ToBytes(value)...)
+			// Write register value as 2 bytes (big endian) at correct position
+			copy(res.Payload[payloadIndex:payloadIndex+2], modbus.Uint16ToBytes(value))
+			payloadIndex += 2
+		}
+
+		// Timesync hack - handle first
+		timeregAddr := []byte{0x8F, 0xFC}
+		if addr == modbus.BytesToUint16(timeregAddr) {
+			var syncTime uint64 = 2815470101985099801 // 2025-08-14 15:36
+
+			// Split into 4 words (16-bit each, big endian)
+			word0 := uint16((syncTime >> 48) & 0xFFFF)
+			word1 := uint16((syncTime >> 32) & 0xFFFF)
+			word2 := uint16((syncTime >> 16) & 0xFFFF)
+			word3 := uint16(syncTime & 0xFFFF)
+
+			// Copy the 4 words into the first 8 bytes of res.payload
+			copy(res.Payload[1:3], modbus.Uint16ToBytes(word0))
+			copy(res.Payload[3:5], modbus.Uint16ToBytes(word1))
+			copy(res.Payload[5:7], modbus.Uint16ToBytes(word2))
+			copy(res.Payload[7:9], modbus.Uint16ToBytes(word3))
 		}
 
 		return res
@@ -177,6 +178,48 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 			UnitId:       pdu.UnitId,
 			FunctionCode: pdu.FunctionCode,
 			Payload:      pdu.Payload[0:4], // Echo back address and value
+		}
+		return res
+	}
+
+	if pdu.FunctionCode == modbus.FC16WriteMultipleRegisters {
+		// FC16 payload format: [startAddr(2 bytes)][quantity(2 bytes)][byteCount(1 byte)][values(N bytes)]
+		// addr and quantity already extracted at the beginning
+		byteCount := pdu.Payload[4]
+
+		// Validate payload length
+		expectedLength := 5 + int(byteCount)
+		if len(pdu.Payload) < expectedLength {
+			slog.Debug("FC16 invalid payload length", "expected", expectedLength, "got", len(pdu.Payload))
+			return nil
+		}
+
+		// Validate byte count matches quantity
+		if byteCount != uint8(quantity*2) {
+			slog.Debug("FC16 byte count mismatch", "expected", quantity*2, "got", byteCount)
+			return nil
+		}
+
+		// Initialize unit's register map if it doesn't exist
+		if h.registers[pdu.UnitId] == nil {
+			h.registers[pdu.UnitId] = make(map[uint16]uint16)
+		}
+
+		// Write all register values
+		valueIndex := 5 // Start after: addr(2) + quantity(2) + byteCount(1)
+		for i := uint16(0); i < quantity; i++ {
+			currentAddr := addr + i
+			value := modbus.BytesToUint16(pdu.Payload[valueIndex : valueIndex+2])
+			h.registers[pdu.UnitId][currentAddr] = value
+			slog.Debug("FC16 Write Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("%X", currentAddr), "value", fmt.Sprintf("%X", value))
+			valueIndex += 2
+		}
+
+		// FC16 response: echo back starting address and quantity
+		res := &modbus.PDU{
+			UnitId:       pdu.UnitId,
+			FunctionCode: pdu.FunctionCode,
+			Payload:      pdu.Payload[0:4], // Echo back address and quantity
 		}
 		return res
 	}

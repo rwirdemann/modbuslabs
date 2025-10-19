@@ -5,16 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 )
 
 const (
 	MBAPHeaderLength = 7
 	MaxFrameLength   = 260
 
-	FC2ReadDiscreteInput   uint8 = 0x02
-	FC4ReadInputRegisters  uint8 = 0x04
-	FC5WriteSingleCoil     uint8 = 0x05
-	FC6WriteSingleRegister uint8 = 0x06
+	FC2ReadDiscreteInput       uint8 = 0x02
+	FC4ReadInputRegisters      uint8 = 0x04
+	FC5WriteSingleCoil         uint8 = 0x05
+	FC6WriteSingleRegister     uint8 = 0x06
+	FC16WriteMultipleRegisters uint8 = 0x10
 )
 
 // PDU is a struct to represent a Modbus Protocol Data unit.
@@ -146,4 +148,18 @@ func EncodeBools(in []bool) (out []byte) {
 	}
 
 	return
+}
+
+// Float32ToRegisters converts a float32 value to two uint16 registers (big endian).
+func Float32ToRegisters(f float32) (uint16, uint16) {
+	bits := math.Float32bits(f)
+	high := uint16(bits >> 16)
+	low := uint16(bits & 0xFFFF)
+	return high, low
+}
+
+// RegistersToFloat32 converts two uint16 registers to a float32 value (big endian).
+func RegistersToFloat32(high, low uint16) float32 {
+	bits := (uint32(high) << 16) | uint32(low)
+	return math.Float32frombits(bits)
 }
