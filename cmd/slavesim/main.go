@@ -48,11 +48,16 @@ func main() {
 	}
 
 	modbus := modbuslabs.NewBus(handler, protocolPort)
-	ctx, _ := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	if err := modbus.Start(ctx); err != nil {
 		panic(err)
 	}
 	defer modbus.Stop()
+
+	driver := console.NewKeyboardAdapter(modbus)
+	go driver.Start(cancel)
 
 	<-ctx.Done()
 }

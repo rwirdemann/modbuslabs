@@ -77,6 +77,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		if resCount%8 != 0 {
 			res.Payload[0]++
 		}
+		h.protocolPort.Info(fmt.Sprintf("FC=%X UnitID=%d Address=%X Quantity=%d Value=%v", pdu.FunctionCode, pdu.UnitId, addr, quantity, values))
 
 		// coil values
 		res.Payload = append(res.Payload, modbus.EncodeBools(values)...)
@@ -242,4 +243,8 @@ func (h *Bus) ConnectSlave(unitID uint8) {
 
 func (h *Bus) DisconnectSlave(unitID uint8) {
 
+}
+
+func (h *Bus) Status() string {
+	return "simulator is running"
 }
