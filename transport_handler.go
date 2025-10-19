@@ -6,7 +6,7 @@ import (
 	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
 
-type ProcessPDUCallback func(registerAddress uint16, pdu modbus.PDU)
+type ProcessPDUCallback func(pdu modbus.PDU) *modbus.PDU
 
 type TransportHandler interface {
 	Start(ctx context.Context, processPDU ProcessPDUCallback) (err error)

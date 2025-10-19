@@ -84,11 +84,10 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 						continue
 					}
 
-					regAddr := binary.BigEndian.Uint16(data[2:4])
 					pdu.Payload = data[4:6]
 
 					h.protocolPort.Info(fmt.Sprintf("TX % X", data))
-					processPDU(regAddr, pdu)
+					processPDU(pdu)
 
 					// Echo back the request as response
 					h.serialPort.Write(data)
