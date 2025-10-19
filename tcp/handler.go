@@ -78,11 +78,13 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 			conn, err := h.listener.Accept()
 			if err == nil {
 				slog.Debug("client connected", "remote addr", conn.RemoteAddr())
-				for {
-					if err := h.processRequest(conn, processPDU); err != nil {
-						break
+				go func() {
+					for {
+						if err := h.processRequest(conn, processPDU); err != nil {
+							break
+						}
 					}
-				}
+				}()
 			}
 		}
 	}
