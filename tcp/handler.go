@@ -77,7 +77,6 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 			slog.Debug("listening...")
 			conn, err := h.listener.Accept()
 			if err == nil {
-				slog.Debug("client connected", "remote addr", conn.RemoteAddr())
 				go func() {
 					for {
 						if err := h.processRequest(conn, processPDU); err != nil {
@@ -102,6 +101,7 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 	slog.Debug("MBAP header received", "pdu", pdu, "txid", txnId)
 
 	h.protocolPort.Separator()
+	h.protocolPort.Info(fmt.Sprintf("Incomming request on %s => %d", conn.LocalAddr(), pdu.UnitId))
 	h.protocolPort.Info(fmt.Sprintf("TX % X % X % X", header, pdu.FunctionCode, pdu.Payload))
 
 	res := processPDU(*pdu)

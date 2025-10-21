@@ -32,16 +32,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	var handler modbuslabs.TransportHandler
+	var handler []modbuslabs.TransportHandler
 	switch *transport {
 	case "tcp":
 		var err error
-		handler, err = tcp.NewHandler("tcp://localhost:502", protocolPort)
+		tcp502, err := tcp.NewHandler("tcp://localhost:502", protocolPort)
 		if err != nil {
 			panic(err)
 		}
+		handler = append(handler, tcp502)
+		tcp503, err := tcp.NewHandler("tcp://localhost:503", protocolPort)
+		if err != nil {
+			panic(err)
+		}
+		handler = append(handler, tcp503)
 	case "rtu":
-		handler = rtu.NewHandler("/tmp/virtualcom0", protocolPort)
+		rtu0 := rtu.NewHandler("/tmp/virtualcom0", protocolPort)
+		handler = append(handler, rtu0)
 	default:
 		flag.Usage()
 		os.Exit(1)
