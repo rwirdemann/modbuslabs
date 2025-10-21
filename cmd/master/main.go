@@ -18,6 +18,9 @@ func main() {
 	valueFloat := flag.Float64("float", 0, "the value as float")
 	boolValue := flag.Bool("bool", false, "the value as bool")
 	transport := flag.String("transport", "tcp", "the modbus mode (tcp|rtu)")
+	slaveID := flag.Int("slave", 101, "the slave id")
+	url := flag.String("url", "localhost:502", "the url to connect")
+
 	quantity := flag.Int("quantity", 1, "number of registers to read (for FC4)")
 	fc := flag.Int("fc", int(modbus.FC6WriteSingleRegister), "the modbus function code (2|4|5|6|16)")
 	flag.Parse()
@@ -29,9 +32,9 @@ func main() {
 
 	var handler bmodbus.ClientHandler
 	if *transport == "tcp" {
-		h := bmodbus.NewTCPClientHandler("localhost:502")
+		h := bmodbus.NewTCPClientHandler(*url)
 		h.Timeout = 1 * time.Second
-		h.SlaveId = 101
+		h.SlaveId = uint8(*slaveID)
 		err = h.Connect()
 		if err != nil {
 			log.Fatal(err)

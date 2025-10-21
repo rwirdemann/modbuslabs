@@ -40,6 +40,7 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.protocolPort.Println(a.simulator.Status())
 		case "mute", "m":
 			a.protocolPort.Mute()
+			a.protocolPort.Println("Protocol output muted. Type 'u' to unmute.")
 		case "unmute", "u":
 			a.protocolPort.Unmute()
 		case "add", "a":
@@ -80,10 +81,14 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.protocolPort.Println(fmt.Sprintf("Disconnected slave with unit ID %d", unitID))
 		case "help", "h":
 			a.protocolPort.Println("Commands:")
-			a.protocolPort.Println("  quit/exit/q    - Quit simulator")
-			a.protocolPort.Println("  status/s       - Show simulator status")
-			a.protocolPort.Println("  add/a <unitID> - Add slave")
-			a.protocolPort.Println("  help           - Show help")
+			a.protocolPort.Println("  quit/exit/q           - Quit simulator")
+			a.protocolPort.Println("  status/s              - Show simulator status")
+			a.protocolPort.Println("  mute/m                - Mute protocol output")
+			a.protocolPort.Println("  unmute/u              - Unmute protocol output")
+			a.protocolPort.Println("  add/a <unitID>        - Add slave")
+			a.protocolPort.Println("  connect/c <unitID>    - Connect slave")
+			a.protocolPort.Println("  disconnect/d <unitID> - Disconnect slave")
+			a.protocolPort.Println("  help/h                - Show help")
 		default:
 			fmt.Printf("Unknown command: %s (use 'h' for help)\n", input)
 		}

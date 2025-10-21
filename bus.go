@@ -15,14 +15,14 @@ type slave struct {
 
 // Bus represents a Modbus bus.
 type Bus struct {
-	handler      TransportHandler
+	handler      []TransportHandler
 	protocolPort ProtocolPort
 	slaves       map[uint8]*slave
 	registers    map[uint8]map[uint16]uint16 // map[unitID]map[registerAddr]value
 }
 
 // NewBus creates a new Modbus bus.
-func NewBus(handler TransportHandler, protocolPort ProtocolPort) *Bus {
+func NewBus(handler []TransportHandler, protocolPort ProtocolPort) *Bus {
 	return &Bus{
 		handler:      handler,
 		protocolPort: protocolPort,
@@ -33,12 +33,18 @@ func NewBus(handler TransportHandler, protocolPort ProtocolPort) *Bus {
 
 // Start starts the Modbus bus.
 func (m *Bus) Start(ctx context.Context) error {
-	return m.handler.Start(ctx, m.processPDU)
+	for _, h := range m.handler {
+		go h.Start(ctx, m.processPDU)
+	}
+	return nil
 }
 
 // Stop stops the Modbus bus.
 func (m *Bus) Stop() error {
-	return m.handler.Stop()
+	for _, h := range m.handler {
+		h.Stop()
+	}
+	return nil
 }
 
 func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
@@ -60,7 +66,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		var values = make([]bool, quantity)
 
 		// Read values from registers map
-		for i := uint16(0); i < quantity; i++ {
+		for i := range quantity {
 			currentAddr := addr + i
 			var value uint16
 
@@ -109,7 +115,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 
 		// Read values from registers map
 		payloadIndex := 1 // Start after byte count
-		for i := uint16(0); i < quantity; i++ {
+		for i := range quantity {
 			currentAddr := addr + i
 			var value uint16
 
@@ -225,7 +231,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 
 		// Write all register values
 		valueIndex := 5 // Start after: addr(2) + quantity(2) + byteCount(1)
-		for i := uint16(0); i < quantity; i++ {
+		for i := range quantity {
 			currentAddr := addr + i
 			value := modbus.BytesToUint16(pdu.Payload[valueIndex : valueIndex+2])
 			h.registers[pdu.UnitId][currentAddr] = value
@@ -250,6 +256,9 @@ func (h *Bus) AddSlave(unitID uint8) {
 }
 
 func (h *Bus) ConnectSlave(unitID uint8) {
+	if _, exists := h.slaves[unitID]; !exists {
+		h.slaves[unitID] = &slave{}
+	}
 	h.slaves[unitID].connected = true
 }
 

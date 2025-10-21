@@ -16,7 +16,7 @@ type ProtocolAdapter struct {
 
 func (p *ProtocolAdapter) Info(msg string) {
 	ts := time.Now().Format(time.DateTime)
-	p.print(fmt.Sprintf("%s %s", ts, msg))
+	p.print(fmt.Sprintf("%s %s", ts, msg), false)
 }
 
 func (p *ProtocolAdapter) Separator() {
@@ -24,11 +24,11 @@ func (p *ProtocolAdapter) Separator() {
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
 		width = w
 	}
-	p.print(strings.Repeat("─", width))
+	p.print(strings.Repeat("─", width), false)
 }
 
 func (p *ProtocolAdapter) Println(msg string) {
-	p.print(msg)
+	p.print(msg, true)
 }
 
 func (p *ProtocolAdapter) Mute() {
@@ -39,8 +39,8 @@ func (p *ProtocolAdapter) Unmute() {
 	p.muted = false
 }
 
-func (p *ProtocolAdapter) print(s string) {
-	if p.muted {
+func (p *ProtocolAdapter) print(s string, force bool) {
+	if !force && p.muted {
 		return
 	}
 
