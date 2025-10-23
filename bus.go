@@ -275,13 +275,20 @@ func (h *Bus) DisconnectSlave(unitID uint8) {
 
 func (h *Bus) Status() string {
 	var status string
-	status = "Slaves:\n"
+	status = "Ports:\n"
+	for i, p := range h.handler {
+		status += fmt.Sprintf("  Port %d: %s\n", i, p.Description())
+	}
+	status += "Slaves:"
+	if len(h.slaves) == 0 {
+		status += "\n  <no slaves connected>"
+	}
 	for unitID, slave := range h.slaves {
 		connectStatus := "disconnected"
 		if slave.connected {
 			connectStatus = "connected"
 		}
-		status += fmt.Sprintf("  UnitID %d: %s\n", unitID, connectStatus)
+		status += fmt.Sprintf("\n  Unit %d: %s", unitID, connectStatus)
 	}
 	return status
 }

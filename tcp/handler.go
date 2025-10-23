@@ -68,6 +68,10 @@ func (h *Handler) Stop() error {
 	return nil
 }
 
+func (h *Handler) Description() string {
+	return h.url
+}
+
 func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.ProcessPDUCallback) {
 	for {
 		select {
