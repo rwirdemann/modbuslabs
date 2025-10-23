@@ -44,6 +44,10 @@ func (h *Handler) Start(ctx context.Context, processPDU modbuslabs.ProcessPDUCal
 	return nil
 }
 
+func (h *Handler) Description() string {
+	return h.url
+}
+
 func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.ProcessPDUCallback) {
 	buffer := make([]byte, 256)
 	for {
