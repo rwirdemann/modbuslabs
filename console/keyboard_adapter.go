@@ -43,18 +43,6 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.protocolPort.Println("Protocol output muted. Type 'u' to unmute.")
 		case "unmute", "u":
 			a.protocolPort.Unmute()
-		case "add", "a":
-			if len(parts) < 2 {
-				a.protocolPort.Println("Error: add command requires a unit ID (e.g., 'add 1')")
-				continue
-			}
-			unitID, err := strconv.ParseUint(parts[1], 10, 8)
-			if err != nil {
-				a.protocolPort.Println(fmt.Sprintf("Error: invalid unit ID '%s', must be a number between 0-255", parts[1]))
-				continue
-			}
-			a.simulator.AddSlave(uint8(unitID))
-			a.protocolPort.Println(fmt.Sprintf("Added slave with unit ID %d", unitID))
 		case "connect", "c":
 			if len(parts) < 2 {
 				a.protocolPort.Println("Error: connect command requires a unit ID (e.g., 'connect 1')")
@@ -85,7 +73,6 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.protocolPort.Println("  status/s              - Show simulator status")
 			a.protocolPort.Println("  mute/m                - Mute protocol output")
 			a.protocolPort.Println("  unmute/u              - Unmute protocol output")
-			a.protocolPort.Println("  add/a <unitID>        - Add slave")
 			a.protocolPort.Println("  connect/c <unitID>    - Connect slave")
 			a.protocolPort.Println("  disconnect/d <unitID> - Disconnect slave")
 			a.protocolPort.Println("  help/h                - Show help")
@@ -97,7 +84,6 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 
 type simulatorPort interface {
 	Status() string
-	AddSlave(unitID uint8)
 	ConnectSlave(unitID uint8)
 	DisconnectSlave(unitID uint8)
 }
