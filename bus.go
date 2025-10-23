@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
@@ -19,6 +20,7 @@ type Bus struct {
 	protocolPort ProtocolPort
 	slaves       map[uint8]*slave
 	registers    map[uint8]map[uint16]uint16 // map[unitID]map[registerAddr]value
+	slaveLock    *sync.RWMutex
 }
 
 // NewBus creates a new Modbus bus.
@@ -28,6 +30,7 @@ func NewBus(handler []TransportHandler, protocolPort ProtocolPort) *Bus {
 		protocolPort: protocolPort,
 		slaves:       make(map[uint8]*slave),
 		registers:    make(map[uint8]map[uint16]uint16),
+		slaveLock:    new(sync.RWMutex),
 	}
 }
 
@@ -48,14 +51,19 @@ func (m *Bus) Stop() error {
 }
 
 func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
+	h.slaveLock.RLock()
 	if slave, exists := h.slaves[pdu.UnitId]; !exists || !slave.connected {
+		h.slaveLock.RUnlock()
 		h.protocolPort.Info(fmt.Sprintf("slave %d does not exist or is offline", pdu.UnitId))
 		return nil
 	}
+	h.slaveLock.RUnlock()
 
 	addr := modbus.BytesToUint16(pdu.Payload[0:2])
 
 	if pdu.FunctionCode == modbus.FC2ReadDiscreteInput {
+		// Response Payload:  [Byte Count] [Status Byte 1] [Status Byte 2] ...
+
 		quantity := modbus.BytesToUint16(pdu.Payload[2:4])
 		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "quantitiy", quantity, "pdu", pdu)
 		res := &modbus.PDU{
@@ -251,10 +259,6 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 	return nil
 }
 
-func (h *Bus) AddSlave(unitID uint8) {
-	h.slaves[unitID] = &slave{}
-}
-
 func (h *Bus) ConnectSlave(unitID uint8) {
 	if _, exists := h.slaves[unitID]; !exists {
 		h.slaves[unitID] = &slave{}
@@ -263,6 +267,9 @@ func (h *Bus) ConnectSlave(unitID uint8) {
 }
 
 func (h *Bus) DisconnectSlave(unitID uint8) {
+	if _, exists := h.slaves[unitID]; !exists {
+		return
+	}
 	h.slaves[unitID].connected = false
 }
 
