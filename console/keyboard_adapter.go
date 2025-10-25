@@ -44,8 +44,8 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 		case "unmute", "u":
 			a.protocolPort.Unmute()
 		case "connect", "c":
-			if len(parts) < 2 {
-				a.protocolPort.Println("Error: connect command requires a unit ID (e.g., 'connect 1')")
+			if len(parts) < 3 {
+				a.protocolPort.Println("Error: connect command requires a unit ID (e.g., 'connect 1 localhost:502')")
 				continue
 			}
 			unitID, err := strconv.ParseUint(parts[1], 10, 8)
@@ -53,8 +53,9 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 				a.protocolPort.Println(fmt.Sprintf("Error: invalid unit ID '%s', must be a number between 0-255", parts[1]))
 				continue
 			}
-			a.simulator.ConnectSlave(uint8(unitID))
-			a.protocolPort.Println(fmt.Sprintf("Connected slave with unit ID %d", unitID))
+			url := parts[2]
+			a.simulator.ConnectSlave(uint8(unitID), url)
+			a.protocolPort.Println(fmt.Sprintf("Connected slave with unit ID %d to %s", unitID, url))
 		case "disconnect", "d":
 			if len(parts) < 2 {
 				a.protocolPort.Println("Error: disconnect command requires a unit ID (e.g., 'connect 1')")
@@ -69,13 +70,13 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.protocolPort.Println(fmt.Sprintf("Disconnected slave with unit ID %d", unitID))
 		case "help", "h":
 			a.protocolPort.Println("Commands:")
-			a.protocolPort.Println("  quit/exit/q           - Quit simulator")
-			a.protocolPort.Println("  status/s              - Show simulator status")
-			a.protocolPort.Println("  mute/m                - Mute protocol output")
-			a.protocolPort.Println("  unmute/u              - Unmute protocol output")
-			a.protocolPort.Println("  connect/c <unitID>    - Connect slave")
-			a.protocolPort.Println("  disconnect/d <unitID> - Disconnect slave")
-			a.protocolPort.Println("  help/h                - Show help")
+			a.protocolPort.Println("  quit/exit/q              - Quit simulator")
+			a.protocolPort.Println("  status/s                 - Show simulator status")
+			a.protocolPort.Println("  mute/m                   - Mute protocol output")
+			a.protocolPort.Println("  unmute/u                 - Unmute protocol output")
+			a.protocolPort.Println("  connect/c <unitID> <url> - Connect slave")
+			a.protocolPort.Println("  disconnect/d <unitID>    - Disconnect slave")
+			a.protocolPort.Println("  help/h                   - Show help")
 		default:
 			fmt.Printf("Unknown command: %s (use 'h' for help)\n", input)
 		}
@@ -84,6 +85,6 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 
 type simulatorPort interface {
 	Status() string
-	ConnectSlave(unitID uint8)
+	ConnectSlave(unitID uint8, url string)
 	DisconnectSlave(unitID uint8)
 }
