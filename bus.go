@@ -11,6 +11,7 @@ import (
 
 type slave struct {
 	unitID    uint8
+	registers map[uint16]uint16
 	connected bool
 }
 
@@ -18,20 +19,22 @@ type slave struct {
 type Bus struct {
 	handler      []TransportHandler
 	protocolPort ProtocolPort
-	slaves       map[uint8]*slave
-	registers    map[uint8]map[uint16]uint16 // map[unitID]map[registerAddr]value
+	slaves       map[string]map[uint8]*slave // map[url]map[unitID]slave
 	slaveLock    *sync.RWMutex
 }
 
 // NewBus creates a new Modbus bus.
 func NewBus(handler []TransportHandler, protocolPort ProtocolPort) *Bus {
-	return &Bus{
+	b := &Bus{
 		handler:      handler,
 		protocolPort: protocolPort,
-		slaves:       make(map[uint8]*slave),
-		registers:    make(map[uint8]map[uint16]uint16),
+		slaves:       make(map[string]map[uint8]*slave),
 		slaveLock:    new(sync.RWMutex),
 	}
+	for _, h := range b.handler {
+		b.slaves[h.Description()] = make(map[uint8]*slave)
+	}
+	return b
 }
 
 // Start starts the Modbus bus.
@@ -50,9 +53,19 @@ func (m *Bus) Stop() error {
 	return nil
 }
 
+func (b *Bus) findSlave(unitID uint8) (*slave, bool) {
+	for _, h := range b.handler {
+		if s, exists := b.slaves[h.Description()][unitID]; exists {
+			return s, true
+		}
+	}
+	return nil, false
+}
+
 func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 	h.slaveLock.RLock()
-	if slave, exists := h.slaves[pdu.UnitId]; !exists || !slave.connected {
+	slave, exists := h.findSlave(pdu.UnitId)
+	if !exists || !slave.connected {
 		h.slaveLock.RUnlock()
 		h.protocolPort.Info(fmt.Sprintf("slave %d does not exist or is offline", pdu.UnitId))
 		return nil
@@ -78,17 +91,11 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 			currentAddr := addr + i
 			var value uint16
 
-			// Check if unit has registers
-			if unitRegs, exists := h.registers[pdu.UnitId]; exists {
-				// Check if register exists
-				if regValue, exists := unitRegs[currentAddr]; exists {
-					value = regValue
-					slog.Debug("FC2 reading from map", "unitID", pdu.UnitId, "addr", currentAddr, "value", value)
-				} else {
-					slog.Debug("no value for discrete input", "addr", currentAddr)
-				}
+			if regValue, exists := slave.registers[currentAddr]; exists {
+				value = regValue
+				slog.Debug("FC2 reading from map", "unitID", pdu.UnitId, "addr", currentAddr, "value", value)
 			} else {
-				slog.Debug("no registers for unit", "unitID", pdu.UnitId)
+				slog.Debug("no value for discrete input", "addr", currentAddr)
 			}
 
 			// Convert register value to boolean (0x0000 = false, anything else = true)
@@ -127,17 +134,11 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 			currentAddr := addr + i
 			var value uint16
 
-			// Check if unit has registers
-			if unitRegs, exists := h.registers[pdu.UnitId]; exists {
-				// Check if register exists
-				if regValue, exists := unitRegs[currentAddr]; exists {
-					value = regValue
-					slog.Debug("FC4 reading from map", "unitID", pdu.UnitId, "addr", currentAddr, "value", value)
-				} else {
-					slog.Debug("no value for register", "regValue", regValue)
-				}
+			if regValue, exists := slave.registers[currentAddr]; exists {
+				value = regValue
+				slog.Debug("FC4 reading from map", "unitID", pdu.UnitId, "addr", currentAddr, "value", value)
 			} else {
-				slog.Debug("no registers for unit", "unitID", pdu.UnitId)
+				slog.Debug("no value for register", "regValue", regValue)
 			}
 
 			// Write register value as 2 bytes (big endian) at correct position
@@ -171,13 +172,8 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "pdu", pdu)
 		value := modbus.BytesToUint16(pdu.Payload[2:4])
 
-		// Initialize unit's register map if it doesn't exist
-		if h.registers[pdu.UnitId] == nil {
-			h.registers[pdu.UnitId] = make(map[uint16]uint16)
-		}
-
 		// Store the coil value (0xFF00 for true, 0x0000 for false)
-		h.registers[pdu.UnitId][addr] = value
+		slave.registers[addr] = value
 		slog.Debug("FC5 Write Single Coil", "unitID", pdu.UnitId, "addr", fmt.Sprintf("%X", addr), "value", fmt.Sprintf("%X", value))
 
 		// FC5 response: echo back the request (coil address + value)
@@ -194,13 +190,8 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		// FC6 payload format: [regAddr(2 bytes)][value(2 bytes)]
 		value := modbus.BytesToUint16(pdu.Payload[2:4])
 
-		// Initialize unit's register map if it doesn't exist
-		if h.registers[pdu.UnitId] == nil {
-			h.registers[pdu.UnitId] = make(map[uint16]uint16)
-		}
-
 		// Store the value
-		h.registers[pdu.UnitId][addr] = value
+		slave.registers[addr] = value
 		slog.Debug("FC6 Write Single Register", "unitID", pdu.UnitId, "addr", addr, "value", value)
 
 		// FC6 response: echo back the request (register address + value)
@@ -232,17 +223,12 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 			return nil
 		}
 
-		// Initialize unit's register map if it doesn't exist
-		if h.registers[pdu.UnitId] == nil {
-			h.registers[pdu.UnitId] = make(map[uint16]uint16)
-		}
-
 		// Write all register values
 		valueIndex := 5 // Start after: addr(2) + quantity(2) + byteCount(1)
 		for i := range quantity {
 			currentAddr := addr + i
 			value := modbus.BytesToUint16(pdu.Payload[valueIndex : valueIndex+2])
-			h.registers[pdu.UnitId][currentAddr] = value
+			slave.registers[currentAddr] = value
 			slog.Debug("FC16 Write Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("%X", currentAddr), "value", fmt.Sprintf("%X", value))
 			valueIndex += 2
 		}
@@ -259,36 +245,39 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 	return nil
 }
 
-func (h *Bus) ConnectSlave(unitID uint8) {
-	if _, exists := h.slaves[unitID]; !exists {
-		h.slaves[unitID] = &slave{}
+func (h *Bus) ConnectSlave(unitID uint8, url string) {
+	if _, exists := h.slaves[url][unitID]; !exists {
+		h.slaves[url][unitID] = &slave{registers: make(map[uint16]uint16)}
 	}
-	h.slaves[unitID].connected = true
+	h.slaves[url][unitID].connected = true
 }
 
 func (h *Bus) DisconnectSlave(unitID uint8) {
-	if _, exists := h.slaves[unitID]; !exists {
-		return
+	for _, v := range h.slaves {
+		if _, exists := v[unitID]; exists {
+			v[unitID].connected = false
+		}
 	}
-	h.slaves[unitID].connected = false
 }
 
 func (h *Bus) Status() string {
 	var status string
-	status = "Ports:\n"
+	status = "Configuration:"
 	for i, p := range h.handler {
-		status += fmt.Sprintf("  Port %d: %s\n", i, p.Description())
-	}
-	status += "Slaves:"
-	if len(h.slaves) == 0 {
-		status += "\n  <no slaves connected>"
-	}
-	for unitID, slave := range h.slaves {
-		connectStatus := "disconnected"
-		if slave.connected {
-			connectStatus = "connected"
+		status += fmt.Sprintf("\n  Port %d: %s", i, p.Description())
+		if len(h.slaves[p.Description()]) == 0 {
+			status += "\n    <no slaves connected>"
 		}
-		status += fmt.Sprintf("\n  Unit %d: %s", unitID, connectStatus)
+		for unitID, slave := range h.slaves[p.Description()] {
+			connectStatus := "disconnected"
+			if slave.connected {
+				connectStatus = "connected"
+			}
+			status += fmt.Sprintf("\n    - Unit %d: %s", unitID, connectStatus)
+			for addr, value := range slave.registers {
+				status += fmt.Sprintf("\n       % X => % X", addr, value)
+			}
+		}
 	}
 	return status
 }
