@@ -64,7 +64,7 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 				continue
 			}
 			if n > 0 {
-				pdu := modbus.PDU{}
+				pdu := &modbus.PDU{}
 				data := buffer[:n]
 				slog.Debug("Received data from serial port", "n", n, "data", fmt.Sprintf("% X", data))
 				if len(data) < 4 {
@@ -73,29 +73,36 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 				}
 				pdu.UnitId = data[0]
 				pdu.FunctionCode = data[1]
-				switch pdu.FunctionCode {
-				case 0x06:
-					if len(data) < 8 {
-						slog.Error("Received bytes < 8")
-						continue
-					}
+				pdu.Payload = data[2:n]
 
-					// Verify CRC
-					receivedCRC := binary.LittleEndian.Uint16(data[len(data)-2:])
-					calculatedCRC := calculateCRC(data[:len(data)-2])
-					if receivedCRC != calculatedCRC {
-						slog.Error("crc's not equal")
-						continue
-					}
+				h.protocolPort.Separator()
+				h.protocolPort.Info(fmt.Sprintf("Incomming request on /virtual/com0 => %d", pdu.UnitId))
 
-					pdu.Payload = data[4:6]
+				// Verify CRC
+				receivedCRC := binary.LittleEndian.Uint16(data[len(data)-2:])
+				calculatedCRC := calculateCRC(data[:len(data)-2])
+				if receivedCRC != calculatedCRC {
+					slog.Error("crc's not equal")
+					continue
+				}
 
-					h.protocolPort.Info(fmt.Sprintf("TX % X", data))
-					processPDU(pdu)
+				h.protocolPort.Info(fmt.Sprintf("TX % X", data))
+				res := processPDU(*pdu)
 
-					// Echo back the request as response
-					h.serialPort.Write(data)
-					h.protocolPort.Info(fmt.Sprintf("RX % X", data))
+				// Echo back the request as response
+				if res != nil {
+					// Build complete RTU frame: UnitId + FunctionCode + Payload + CRC
+					response := make([]byte, 0, 2+len(res.Payload))
+					response = append(response, res.UnitId)
+					response = append(response, res.FunctionCode)
+					response = append(response, res.Payload...)
+
+					// Calculate and append CRC
+					crc := calculateCRC(response)
+					response = append(response, byte(crc&0xFF), byte(crc>>8))
+
+					h.serialPort.Write(response)
+					h.protocolPort.Info(fmt.Sprintf("RX % X", response))
 				}
 			}
 		}
