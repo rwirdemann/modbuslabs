@@ -66,5 +66,9 @@ func main() {
 	driver := console.NewKeyboardAdapter(modbus, protocolPort)
 	go driver.Start(cancel)
 
+	if *transport == "tcp" {
+		modbus.ConnectSlave(101, "localhost:502")
+	}
+
 	<-ctx.Done()
 }

@@ -63,6 +63,40 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}
+
+			// Sample FC16 Request to write float32:
+			//
+			// 65 10 90 02 00 02 04 42 F6 E9 79 7C 86
+			//
+			// | 0x65 | 101 | Slave-Adresse (dezimal 101) |
+			// | 0x10 | 16 | Function Code (FC16 = Write Multiple Registers) |
+			// | 0x90 0x02 | 36866 | Startadresse (Register 0x9002) |
+			// | 0x00 0x02 | 2 | Anzahl Register (Float32 = 2 Register) |
+			// | 0x04 | 4 | Byte Count (2 Register × 2 Bytes = 4 Bytes) |
+			// | 0x42 0xF6 | | Float32 High Word (Bytes 1-2) |
+			// | 0xE9 0x79 | | Float32 Low Word (Bytes 3-4) |
+			// | 0x7C 0x86 | | CRC-16 (Low Byte, High Byte) |
+			//
+			// Float32-Conversion:
+			//
+			// Der Wert **123.456** als IEEE 754 Float32:
+			// - **Hexadezimal:** 0x42F6E979
+			// - **Register 0x9002:** 0x42F6
+			// - **Register 0x9003:** 0xE979
+			//
+			// The Response
+			// 65 10 90 02 00 02 01 47
+			//
+			// | 0x65 | 101 | Slave-Adresse (Echo vom Request) |
+			// | 0x10 | 16 | Function Code (Echo vom Request) |
+			// | 0x90 0x02 | 36866 | Startadresse (Echo: Register 0x9002) |
+			// | 0x00 0x02 | 2 | Anzahl geschriebener Register (Echo) |
+			// | 0x01 0x47 | | CRC-16 (Low Byte, High Byte) |
+			//
+			// ## Wichtige Punkte:
+			// 1. **Bei FC16 (Write Multiple Registers)** gibt der Slave die **gleichen Informationen zurück** wie im Request (ohne die Daten selbst)
+			// 2. Die Response ist **deutlich kürzer** als der Request (nur 8 Bytes statt 13 Bytes)
+			// 3. Der Slave bestätigt damit: "Ich habe 2 Register ab Adresse 0x9002 erfolgreich geschrieben"
 			if n > 0 {
 				pdu := &modbus.PDU{}
 				data := buffer[:n]
@@ -77,16 +111,16 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 
 				h.protocolPort.Separator()
 				h.protocolPort.Info(fmt.Sprintf("Incomming request on /virtual/com0 => %d", pdu.UnitId))
+				h.protocolPort.Info(fmt.Sprintf("TX % X", data))
 
 				// Verify CRC
 				receivedCRC := binary.LittleEndian.Uint16(data[len(data)-2:])
 				calculatedCRC := calculateCRC(data[:len(data)-2])
 				if receivedCRC != calculatedCRC {
-					slog.Error("crc's not equal")
+					h.protocolPort.Info("crc's are not equal")
 					continue
 				}
 
-				h.protocolPort.Info(fmt.Sprintf("TX % X", data))
 				res := processPDU(*pdu)
 
 				// Echo back the request as response
@@ -105,6 +139,7 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 					h.protocolPort.Info(fmt.Sprintf("RX % X", response))
 				}
 			}
+			h.protocolPort.Separator()
 		}
 	}
 }
