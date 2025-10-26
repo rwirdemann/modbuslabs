@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"strconv"
 	"time"
 
 	bmodbus "github.com/goburrow/modbus"
@@ -14,13 +15,10 @@ import (
 
 func main() {
 	addr := flag.String("address", "0x000", "0x0000 to 0x270F")
-	value := flag.Int("value", 0, "the value as int")
-	valueFloat := flag.Float64("float", 0, "the value as float")
-	boolValue := flag.Bool("bool", false, "the value as bool")
+	value := flag.String("value", "", "the value as uint16, float32 or bool")
 	transport := flag.String("transport", "tcp", "the modbus mode (tcp|rtu)")
 	slaveID := flag.Int("slave", 101, "the slave id")
 	url := flag.String("url", "localhost:502", "the url to connect")
-
 	quantity := flag.Int("quantity", 1, "number of registers to read (for FC4)")
 	fc := flag.Int("fc", int(modbus.FC6WriteSingleRegister), "the modbus function code (2|4|5|6|16)")
 	flag.Parse()
@@ -81,14 +79,11 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		ts := time.Now().Format(time.DateTime)
-		fmt.Printf("%s % X\n", ts, bb)
 
 		// Print register values (2 bytes per register)
-		fmt.Printf("Register values (%d registers):\n", *quantity)
 		for i := 0; i < *quantity; i++ {
 			regValue := uint16(bb[i*2])<<8 | uint16(bb[i*2+1])
-			fmt.Printf("  Register 0x%04X: 0x%04X (%d)\n", addrHex.Uint16()+uint16(i), regValue, regValue)
+			fmt.Println(regValue)
 		}
 
 		// If we read exactly 2 registers, try to decode as float32
@@ -101,7 +96,7 @@ func main() {
 	case int(modbus.FC5WriteSingleCoil):
 		// Convert int value to Modbus coil format: 0xFF00 for ON, 0x0000 for OFF
 		var coilValue uint16
-		if *boolValue {
+		if *value == "true" {
 			coilValue = 0xFF00
 		} else {
 			coilValue = 0x0000
@@ -112,21 +107,28 @@ func main() {
 		}
 		ts := time.Now().Format(time.DateTime)
 		fmt.Printf("%s % X\n", ts, bb)
-		fmt.Printf("Coil 0x%04X set to %v\n", addrHex.Uint16(), *boolValue)
+		fmt.Printf("Coil 0x%04X set to %s\n", addrHex.Uint16(), *value)
 	case int(modbus.FC6WriteSingleRegister):
-		bb, err := client.WriteSingleRegister(addrHex.Uint16(), uint16(*value))
+		i, err := strconv.ParseUint(*value, 10, 16)
+		if err != nil {
+			slog.Error("invalid uint16 value", "err", err)
+		}
+		bb, err := client.WriteSingleRegister(addrHex.Uint16(), uint16(i))
 		if err != nil {
 			log.Fatal(err)
 		}
 		ts := time.Now().Format(time.DateTime)
 		fmt.Printf("%s % X\n", ts, bb)
+		fmt.Printf("Register 0x%04X set to %d\n", addrHex.Uint16(), i)
 	case int(modbus.FC16WriteMultipleRegisters):
-		// Convert float64 to float32
-		f32 := float32(*valueFloat)
+		f, err := strconv.ParseFloat(*value, 32)
+		if err != nil {
+			slog.Error("invalid float value", "err", err)
+		}
 
 		// Convert float32 to two registers
-		high, low := modbus.Float32ToRegisters(f32)
-		fmt.Printf("Writing float32 value %.6f as registers: 0x%04X, 0x%04X\n", f32, high, low)
+		high, low := modbus.Float32ToRegisters(float32(f))
+		fmt.Printf("Writing float32 value %.6f as registers: 0x%04X, 0x%04X\n", f, high, low)
 
 		// Convert register values to bytes (2 registers = 4 bytes)
 		valueBytes := make([]byte, 4)
