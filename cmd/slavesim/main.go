@@ -66,8 +66,11 @@ func main() {
 	driver := console.NewKeyboardAdapter(modbus, protocolPort)
 	go driver.Start(cancel)
 
-	if *transport == "tcp" {
+	switch *transport {
+	case "tcp":
 		modbus.ConnectSlave(101, "localhost:502")
+	case "rtu":
+		modbus.ConnectSlave(101, "/tmp/virtualcom0")
 	}
 
 	<-ctx.Done()
