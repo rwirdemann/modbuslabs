@@ -40,7 +40,9 @@ func NewBus(handler []TransportHandler, protocolPort ProtocolPort) *Bus {
 // Start starts the Modbus bus.
 func (m *Bus) Start(ctx context.Context) error {
 	for _, h := range m.handler {
-		go h.Start(ctx, m.processPDU)
+		if err := h.Start(ctx, m.processPDU); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -56,9 +58,12 @@ func (m *Bus) Stop() error {
 func (b *Bus) findSlave(unitID uint8) (*slave, bool) {
 	for _, h := range b.handler {
 		if s, exists := b.slaves[h.Description()][unitID]; exists {
+			slog.Debug("slave exists", "unitID", unitID)
 			return s, true
 		}
 	}
+	slog.Debug("slave does not exist", "slaves", b.slaves)
+
 	return nil, false
 }
 
@@ -250,6 +255,7 @@ func (h *Bus) ConnectSlave(unitID uint8, url string) {
 		h.slaves[url][unitID] = &slave{registers: make(map[uint16]uint16)}
 	}
 	h.slaves[url][unitID].connected = true
+	slog.Debug("slave connected", "unitID", unitID, "url", url)
 }
 
 func (h *Bus) DisconnectSlave(unitID uint8) {
