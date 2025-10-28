@@ -20,7 +20,7 @@ type Bus struct {
 	handler      []TransportHandler
 	protocolPort ProtocolPort
 	slaves       map[string]map[uint8]*slave // map[url]map[unitID]slave
-	slaveLock    *sync.RWMutex
+	slaveLock    *sync.Mutex
 }
 
 // NewBus creates a new Modbus bus.
@@ -29,7 +29,7 @@ func NewBus(handler []TransportHandler, protocolPort ProtocolPort) *Bus {
 		handler:      handler,
 		protocolPort: protocolPort,
 		slaves:       make(map[string]map[uint8]*slave),
-		slaveLock:    new(sync.RWMutex),
+		slaveLock:    new(sync.Mutex),
 	}
 	for _, h := range b.handler {
 		b.slaves[h.Description()] = make(map[uint8]*slave)
@@ -68,14 +68,13 @@ func (b *Bus) findSlave(unitID uint8) (*slave, bool) {
 }
 
 func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
-	h.slaveLock.RLock()
+	h.slaveLock.Lock()
+	defer h.slaveLock.Unlock()
 	slave, exists := h.findSlave(pdu.UnitId)
 	if !exists || !slave.connected {
-		h.slaveLock.RUnlock()
 		h.protocolPort.Info(fmt.Sprintf("slave %d does not exist or is offline", pdu.UnitId))
 		return nil
 	}
-	h.slaveLock.RUnlock()
 
 	addr := modbus.BytesToUint16(pdu.Payload[0:2])
 
@@ -152,22 +151,22 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		}
 
 		// Timesync hack - handle first
-		timeregAddr := []byte{0x8F, 0xFC}
-		if addr == modbus.BytesToUint16(timeregAddr) {
-			var syncTime uint64 = 2815470101985099801 // 2025-08-14 15:36
+		// timeregAddr := []byte{0x8F, 0xFC}
+		// if addr == modbus.BytesToUint16(timeregAddr) {
+		// 	var syncTime uint64 = 2815470101985099801 // 2025-08-14 15:36
 
-			// Split into 4 words (16-bit each, big endian)
-			word0 := uint16((syncTime >> 48) & 0xFFFF)
-			word1 := uint16((syncTime >> 32) & 0xFFFF)
-			word2 := uint16((syncTime >> 16) & 0xFFFF)
-			word3 := uint16(syncTime & 0xFFFF)
+		// 	// Split into 4 words (16-bit each, big endian)
+		// 	word0 := uint16((syncTime >> 48) & 0xFFFF)
+		// 	word1 := uint16((syncTime >> 32) & 0xFFFF)
+		// 	word2 := uint16((syncTime >> 16) & 0xFFFF)
+		// 	word3 := uint16(syncTime & 0xFFFF)
 
-			// Copy the 4 words into the first 8 bytes of res.payload
-			copy(res.Payload[1:3], modbus.Uint16ToBytes(word0))
-			copy(res.Payload[3:5], modbus.Uint16ToBytes(word1))
-			copy(res.Payload[5:7], modbus.Uint16ToBytes(word2))
-			copy(res.Payload[7:9], modbus.Uint16ToBytes(word3))
-		}
+		// 	// Copy the 4 words into the first 8 bytes of res.payload
+		// 	copy(res.Payload[1:3], modbus.Uint16ToBytes(word0))
+		// 	copy(res.Payload[3:5], modbus.Uint16ToBytes(word1))
+		// 	copy(res.Payload[5:7], modbus.Uint16ToBytes(word2))
+		// 	copy(res.Payload[7:9], modbus.Uint16ToBytes(word3))
+		// }
 
 		return res
 	}
