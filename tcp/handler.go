@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/rwirdemann/modbuslabs"
+	"github.com/rwirdemann/modbuslabs/message"
 	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
 
@@ -112,8 +113,8 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 	slog.Debug("MBAP header received", "pdu", pdu, "txid", txnId)
 
 	h.protocolPort.Separator()
-	h.protocolPort.Info(fmt.Sprintf("Incomming request on %s => %d", conn.LocalAddr(), pdu.UnitId))
-	h.protocolPort.Info(fmt.Sprintf("TX % X % X % X", header, pdu.FunctionCode, pdu.Payload))
+	m := message.Unencoded{Value: fmt.Sprintf("TX % X % X % X", header, pdu.FunctionCode, pdu.Payload)}
+	h.protocolPort.InfoX(m)
 
 	res := processPDU(*pdu)
 
@@ -123,7 +124,7 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 			return err
 		}
 		slog.Debug(fmt.Sprintf("MBAP response written: % X", payload))
-		h.protocolPort.Info(fmt.Sprintf("RX % X", payload))
+		h.protocolPort.InfoX(message.NewUnencoded(fmt.Sprintf("RX % X", payload)))
 	}
 	h.protocolPort.Separator()
 	return nil

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/rwirdemann/modbuslabs/message"
 	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
 
@@ -82,6 +83,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		// Response Payload:  [Byte Count] [Status Byte 1] [Status Byte 2] ...
 
 		quantity := modbus.BytesToUint16(pdu.Payload[2:4])
+		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%X Quantity=%d", pdu.FunctionCode, pdu.UnitId, addr, quantity)))
 		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "quantitiy", quantity, "pdu", pdu)
 		res := &modbus.PDU{
 			UnitId:       pdu.UnitId,
@@ -114,7 +116,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		if resCount%8 != 0 {
 			res.Payload[0]++
 		}
-		h.protocolPort.Info(fmt.Sprintf("FC=%X UnitID=%d Address=%X Quantity=%d Value=%v", pdu.FunctionCode, pdu.UnitId, addr, quantity, values))
+		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("RX FC=%d UnitID=%d Address=0x%X Quantity=%d Values=%v", pdu.FunctionCode, pdu.UnitId, addr, quantity, values)))
 
 		// coil values
 		res.Payload = append(res.Payload, modbus.EncodeBools(values)...)
@@ -123,7 +125,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 
 	if pdu.FunctionCode == modbus.FC4ReadInputRegisters {
 		quantity := modbus.BytesToUint16(pdu.Payload[2:4])
-		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "quantitiy", quantity, "pdu", pdu)
+		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%X Quantity=%d", pdu.FunctionCode, pdu.UnitId, addr, quantity)))
 		byteCount := uint8(quantity * 2)
 		res := &modbus.PDU{
 			UnitId:       pdu.UnitId,
@@ -134,15 +136,21 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 
 		// Read values from registers map
 		payloadIndex := 1 // Start after byte count
+		values := ""
 		for i := range quantity {
 			currentAddr := addr + i
 			var value uint16
 
+			if len(values) > 0 {
+				values += ", "
+			}
 			if regValue, exists := slave.registers[currentAddr]; exists {
 				value = regValue
+				values += fmt.Sprintf("0x%X => 0x%X", currentAddr, value)
 				slog.Debug("FC4 reading from map", "unitID", pdu.UnitId, "addr", currentAddr, "value", value)
 			} else {
 				slog.Debug("no value for register", "regValue", regValue)
+				values += fmt.Sprintf("0x%X => <none>", currentAddr)
 			}
 
 			// Write register value as 2 bytes (big endian) at correct position
@@ -150,24 +158,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 			payloadIndex += 2
 		}
 
-		// Timesync hack - handle first
-		// timeregAddr := []byte{0x8F, 0xFC}
-		// if addr == modbus.BytesToUint16(timeregAddr) {
-		// 	var syncTime uint64 = 2815470101985099801 // 2025-08-14 15:36
-
-		// 	// Split into 4 words (16-bit each, big endian)
-		// 	word0 := uint16((syncTime >> 48) & 0xFFFF)
-		// 	word1 := uint16((syncTime >> 32) & 0xFFFF)
-		// 	word2 := uint16((syncTime >> 16) & 0xFFFF)
-		// 	word3 := uint16(syncTime & 0xFFFF)
-
-		// 	// Copy the 4 words into the first 8 bytes of res.payload
-		// 	copy(res.Payload[1:3], modbus.Uint16ToBytes(word0))
-		// 	copy(res.Payload[3:5], modbus.Uint16ToBytes(word1))
-		// 	copy(res.Payload[5:7], modbus.Uint16ToBytes(word2))
-		// 	copy(res.Payload[7:9], modbus.Uint16ToBytes(word3))
-		// }
-
+		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("RX FC=%d UnitID=%d Address=0x%X Values=%s", pdu.FunctionCode, pdu.UnitId, addr, values)))
 		return res
 	}
 
@@ -229,13 +220,22 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 
 		// Write all register values
 		valueIndex := 5 // Start after: addr(2) + quantity(2) + byteCount(1)
+		values := ""
 		for i := range quantity {
 			currentAddr := addr + i
 			value := modbus.BytesToUint16(pdu.Payload[valueIndex : valueIndex+2])
 			slave.registers[currentAddr] = value
 			slog.Debug("FC16 Write Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("%X", currentAddr), "value", fmt.Sprintf("%X", value))
+			if len(values) > 0 {
+				values += ", "
+			}
+			values += fmt.Sprintf("0x%X => 0x%X", currentAddr, value)
 			valueIndex += 2
 		}
+
+		m := message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%04X Quantity=%d ByteCount=%d Values: %s",
+			pdu.FunctionCode, pdu.UnitId, addr, quantity, byteCount, values))
+		h.protocolPort.InfoX(m)
 
 		// FC16 response: echo back starting address and quantity
 		res := &modbus.PDU{
@@ -243,6 +243,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 			FunctionCode: pdu.FunctionCode,
 			Payload:      pdu.Payload[0:4], // Echo back address and quantity
 		}
+		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("RX FC=%d UnitID=%d Payload=% X", res.FunctionCode, res.UnitId, res.Payload)))
 		return res
 	}
 

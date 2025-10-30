@@ -1,7 +1,7 @@
 package modbuslabs
 
 type ControlPort interface {
-	AddSlave(unitID uint8)
-	ConnectSlave(unitID uint8)
+	ConnectSlave(unitID uint8, url string)
 	DisconnectSlave(unitID uint8)
+	Status() string
 }

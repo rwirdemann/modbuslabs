@@ -12,11 +12,11 @@ import (
 )
 
 type KeyboardAdapter struct {
-	simulator    simulatorPort
+	simulator    modbuslabs.ControlPort
 	protocolPort modbuslabs.ProtocolPort
 }
 
-func NewKeyboardAdapter(slaveSimulator simulatorPort, protocolPort modbuslabs.ProtocolPort) *KeyboardAdapter {
+func NewKeyboardAdapter(slaveSimulator modbuslabs.ControlPort, protocolPort modbuslabs.ProtocolPort) *KeyboardAdapter {
 	return &KeyboardAdapter{simulator: slaveSimulator, protocolPort: protocolPort}
 }
 
@@ -41,6 +41,8 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 		case "mute", "m":
 			a.protocolPort.Mute()
 			a.protocolPort.Println("Protocol output muted. Type 'u' to unmute.")
+		case "toggle", "t":
+			a.protocolPort.Toggle()
 		case "unmute", "u":
 			a.protocolPort.Unmute()
 		case "connect", "c":
@@ -76,6 +78,7 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.protocolPort.Println("  unmute/u                 - Unmute protocol output")
 			a.protocolPort.Println("  connect/c <unitID> <url> - Connect slave")
 			a.protocolPort.Println("  disconnect/d <unitID>    - Disconnect slave")
+			a.protocolPort.Println("  toggle/t                 - Toggle output format")
 			a.protocolPort.Println("  help/h                   - Show help")
 		default:
 			fmt.Printf("Unknown command: %s (use 'h' for help)\n", input)

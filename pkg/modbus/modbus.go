@@ -58,23 +58,29 @@ func BytesToUint16(in []byte) uint16 {
 	return binary.BigEndian.Uint16(in)
 }
 
-func EncodeBools(in []bool) (out []byte) {
-	var byteCount uint
+// EncodeBools converts a boolean slice into a byte slice where each byte
+// contains up to 8 boolean values packed as bits. The encoding uses LSB-first
+// bit ordering, where the first boolean maps to bit 0 (least significant bit)
+// of the first byte. This encoding is commonly used in Modbus for representing
+// coil states.
+//
+// Example: []bool{true, false, true} -> []byte{0x05} (binary: 00000101)
+func EncodeBools(in []bool) []byte {
 	var i uint
 
-	byteCount = uint(len(in)) / 8
+	byteCount := uint(len(in)) / 8
 	if len(in)%8 != 0 {
 		byteCount++
 	}
 
-	out = make([]byte, byteCount)
+	out := make([]byte, byteCount)
 	for i = range uint(len(in)) {
 		if in[i] {
 			out[i/8] |= (0x01 << (i % 8))
 		}
 	}
 
-	return
+	return out
 }
 
 // Float32ToRegisters converts a float32 value to two uint16 registers (big endian).

@@ -26,7 +26,7 @@ func main() {
 
 	var protocolPort modbuslabs.ProtocolPort
 	if *out == "console" {
-		protocolPort = &console.ProtocolAdapter{}
+		protocolPort = console.NewProtocolAdapter()
 	} else {
 		flag.Usage()
 		os.Exit(1)
