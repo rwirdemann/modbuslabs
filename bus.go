@@ -78,49 +78,9 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 	}
 
 	addr := modbus.BytesToUint16(pdu.Payload[0:2])
-
-	if pdu.FunctionCode == modbus.FC2ReadDiscreteInput {
-		// Response Payload:  [Byte Count] [Status Byte 1] [Status Byte 2] ...
-
-		quantity := modbus.BytesToUint16(pdu.Payload[2:4])
-		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%X Quantity=%d", pdu.FunctionCode, pdu.UnitId, addr, quantity)))
-		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "quantitiy", quantity, "pdu", pdu)
-		res := &modbus.PDU{
-			UnitId:       pdu.UnitId,
-			FunctionCode: pdu.FunctionCode,
-			Payload:      []byte{0},
-		}
-		var values = make([]bool, quantity)
-
-		// Read values from registers map
-		for i := range quantity {
-			currentAddr := addr + i
-			var value uint16
-
-			if regValue, exists := slave.registers[currentAddr]; exists {
-				value = regValue
-				slog.Debug("FC2 reading from map", "unitID", pdu.UnitId, "addr", currentAddr, "value", value)
-			} else {
-				slog.Debug("no value for discrete input", "addr", currentAddr)
-			}
-
-			// Convert register value to boolean (0x0000 = false, anything else = true)
-			// For coils written with FC5, 0xFF00 = true
-			values[i] = value != 0x0000
-		}
-
-		resCount := len(values)
-
-		// byte count (1 byte for 8 coils)
-		res.Payload[0] = uint8(resCount / 8)
-		if resCount%8 != 0 {
-			res.Payload[0]++
-		}
-		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("RX FC=%d UnitID=%d Address=0x%X Quantity=%d Values=%v", pdu.FunctionCode, pdu.UnitId, addr, quantity, values)))
-
-		// coil values
-		res.Payload = append(res.Payload, modbus.EncodeBools(values)...)
-		return res
+	switch pdu.FunctionCode {
+	case modbus.FC2ReadDiscreteInput:
+		return h.processFC2(slave, addr, pdu)
 	}
 
 	if pdu.FunctionCode == modbus.FC4ReadInputRegisters {
@@ -286,4 +246,52 @@ func (h *Bus) Status() string {
 		}
 	}
 	return status
+}
+
+// Response Payload:  [Byte Count] [Status Byte 1] [Status Byte 2] ...
+// Each status byte contains up to 8 coils.
+func (h *Bus) processFC2(slave *slave, registerAddr uint16, pdu modbus.PDU) *modbus.PDU {
+	quantity := modbus.BytesToUint16(pdu.Payload[2:4])
+	h.info(message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%X Quantity=%d", pdu.FunctionCode, pdu.UnitId, registerAddr, quantity)))
+	slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", registerAddr), "quantitiy", quantity, "pdu", pdu)
+	var values = make([]bool, quantity)
+
+	// Read values from registers map
+	for i := range quantity {
+		currentAddr := registerAddr + i
+		var value uint16
+
+		if regValue, exists := slave.registers[currentAddr]; exists {
+			value = regValue
+			slog.Debug("FC2 reading from map", "unitID", pdu.UnitId, "addr", currentAddr, "value", value)
+		} else {
+			slog.Debug("no value for discrete input", "addr", currentAddr)
+		}
+
+		// Convert register value to boolean (0x0000 = false, anything else = true)
+		// For coils written with FC5, 0xFF00 = true
+		values[i] = value != 0x0000
+	}
+
+	resCount := len(values)
+	res := &modbus.PDU{
+		UnitId:       pdu.UnitId,
+		FunctionCode: pdu.FunctionCode,
+		Payload:      []byte{0},
+	}
+
+	// byte count (1 byte for 8 coils)
+	res.Payload[0] = uint8(resCount / 8)
+	if resCount%8 != 0 {
+		res.Payload[0]++
+	}
+	h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("RX FC=%d UnitID=%d Address=0x%X Quantity=%d Values=%v", pdu.FunctionCode, pdu.UnitId, registerAddr, quantity, values)))
+
+	// coil values
+	res.Payload = append(res.Payload, modbus.EncodeBools(values)...)
+	return res
+}
+
+func (b *Bus) info(m message.Message) {
+	b.protocolPort.InfoX(m)
 }

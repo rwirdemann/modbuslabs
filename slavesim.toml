@@ -1,0 +1,34 @@
+# Slavesim Configuration File
+# This file defines the transport handlers and slaves for the Modbus slave simulator
+
+# Transport handlers define the communication endpoints
+# Type can be "tcp" or "rtu"
+
+[[transport]]
+type = "tcp"
+address = "localhost:502"
+
+[[transport]]
+type = "tcp"
+address = "localhost:503"
+
+# Example RTU transport (uncomment to use):
+# [[transport]]
+# type = "rtu"
+# address = "/tmp/virtualcom0"
+
+# Slave definitions
+# Each slave has an ID and is connected to a specific transport address
+
+[[slave]]
+id = 101
+address = "localhost:502"
+
+# Example: Add more slaves as needed
+# [[slave]]
+# id = 102
+# address = "localhost:503"
+
+# [[slave]]
+# id = 103
+# address = "/tmp/virtualcom0"
