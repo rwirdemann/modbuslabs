@@ -23,6 +23,15 @@ type Transport struct {
 type Slave struct {
 	ID      uint8  `toml:"id"`      // Slave ID (e.g., 101)
 	Address string `toml:"address"` // Reference to transport address
+	Rules   []Rule `toml:"rule"`    // Behavioral rules for this slave
+}
+
+// Rule defines a behavior rule for a slave
+type Rule struct {
+	Trigger  string `toml:"trigger"`  // "on_read", "on_write", "on_read_write"
+	Register uint16 `toml:"register"` // Register address (hex or decimal)
+	Action   string `toml:"action"`   // "set_value", "increment", "decrement", "toggle"
+	Value    uint16 `toml:"value"`    // Value for set_value action
 }
 
 // Load reads and parses a TOML configuration file
@@ -64,11 +73,18 @@ func (c *Config) Validate() error {
 
 	// Check that all slaves reference valid transports
 	for i, s := range c.Slaves {
-		if s.ID <= 0 || s.ID > 255 {
+		if s.ID <= 0 {
 			return fmt.Errorf("slave[%d]: invalid ID %d, must be between 1 and 255", i, s.ID)
 		}
 		if !transportAddresses[s.Address] {
 			return fmt.Errorf("slave[%d]: address %q does not match any transport", i, s.Address)
+		}
+
+		// Validate rules
+		for j, rule := range s.Rules {
+			if err := rule.Validate(); err != nil {
+				return fmt.Errorf("slave[%d].rule[%d]: %w", i, j, err)
+			}
 		}
 	}
 
@@ -82,5 +98,29 @@ func (c *Config) GetTransportByAddress(address string) *Transport {
 			return &t
 		}
 	}
+	return nil
+}
+
+// Validate checks if a rule is valid
+func (r *Rule) Validate() error {
+	validTriggers := map[string]bool{
+		"on_read":       true,
+		"on_write":      true,
+		"on_read_write": true,
+	}
+	if !validTriggers[r.Trigger] {
+		return fmt.Errorf("invalid trigger %q, must be one of: on_read, on_write, on_read_write", r.Trigger)
+	}
+
+	validActions := map[string]bool{
+		"set_value": true,
+		"increment": true,
+		"decrement": true,
+		"toggle":    true,
+	}
+	if !validActions[r.Action] {
+		return fmt.Errorf("invalid action %q, must be one of: set_value, increment, decrement, toggle", r.Action)
+	}
+
 	return nil
 }

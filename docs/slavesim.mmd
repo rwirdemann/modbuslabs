@@ -41,6 +41,15 @@ classDiagram
         }
     }
 
+    namespace rules {
+        class Engine {
+        }
+    }
+
+    namespace config {
+        class Config {
+        }
+    }
 
     namespace modbus {
         class modbus.PDU
@@ -62,10 +71,11 @@ classDiagram
     TransportHandler <|.. rtu.TransportHandler
 
     Bus "1" --> "0..*" Slave
-    ControlPort <|.. Bus
+    ControlPort <|.. Bus : implements
     Bus ..> ProtocolPort
     Bus --> TransportHandler
     Slave --> RegisterMap
+    Slave --> Engine
     Bus ..> modbus.PDU: uses
 
 

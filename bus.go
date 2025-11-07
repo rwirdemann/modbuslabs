@@ -6,14 +6,17 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/rwirdemann/modbuslabs/config"
 	"github.com/rwirdemann/modbuslabs/message"
 	"github.com/rwirdemann/modbuslabs/pkg/modbus"
+	"github.com/rwirdemann/modbuslabs/rules"
 )
 
 type slave struct {
-	unitID    uint8
-	registers map[uint16]uint16
-	connected bool
+	unitID     uint8
+	registers  map[uint16]uint16
+	connected  bool
+	ruleEngine *rules.Engine
 }
 
 // Bus represents a Modbus bus.
@@ -212,10 +215,30 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 
 func (h *Bus) ConnectSlave(unitID uint8, url string) {
 	if _, exists := h.slaves[url][unitID]; !exists {
-		h.slaves[url][unitID] = &slave{registers: make(map[uint16]uint16)}
+		h.slaves[url][unitID] = &slave{
+			registers:  make(map[uint16]uint16),
+			ruleEngine: rules.NewEngine(nil), // No rules
+		}
 	}
 	h.slaves[url][unitID].connected = true
 	slog.Debug("slave connected", "unitID", unitID, "url", url)
+}
+
+// ConnectSlaveWithConfig connects a slave with configuration including rules
+func (h *Bus) ConnectSlaveWithConfig(slaveConfig config.Slave, url string) {
+	if _, exists := h.slaves[url][slaveConfig.ID]; !exists {
+		ruleEngine := rules.NewEngine(slaveConfig.Rules)
+		h.slaves[url][slaveConfig.ID] = &slave{
+			unitID:     slaveConfig.ID,
+			registers:  make(map[uint16]uint16),
+			ruleEngine: ruleEngine,
+		}
+		slog.Info("Slave connected with rules",
+			"unitID", slaveConfig.ID,
+			"url", url,
+			"ruleCount", len(slaveConfig.Rules))
+	}
+	h.slaves[url][slaveConfig.ID].connected = true
 }
 
 func (h *Bus) DisconnectSlave(unitID uint8) {
@@ -248,8 +271,8 @@ func (h *Bus) Status() string {
 	return status
 }
 
-// Response Payload:  [Byte Count] [Status Byte 1] [Status Byte 2] ...
-// Each status byte contains up to 8 coils.
+// Response Payload:  [Byte Count] [Status Byte 1] [Status Byte 2] ... Each
+// status byte contains up to 8 coils.
 func (h *Bus) processFC2(slave *slave, registerAddr uint16, pdu modbus.PDU) *modbus.PDU {
 	quantity := modbus.BytesToUint16(pdu.Payload[2:4])
 	h.info(message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%X Quantity=%d", pdu.FunctionCode, pdu.UnitId, registerAddr, quantity)))
@@ -266,6 +289,14 @@ func (h *Bus) processFC2(slave *slave, registerAddr uint16, pdu modbus.PDU) *mod
 			slog.Debug("FC2 reading from map", "unitID", pdu.UnitId, "addr", currentAddr, "value", value)
 		} else {
 			slog.Debug("no value for discrete input", "addr", currentAddr)
+		}
+
+		// Apply read rules. The rule is applied after the register value has been read
+		// from the store. The read value is the value that is going to be changed after
+		// it has been returned to the master. The new value is update in the store.
+		if newValue, modified := slave.ruleEngine.ApplyRead(currentAddr, value); modified {
+			slave.registers[currentAddr] = newValue
+			h.info(message.NewEncoded(fmt.Sprintf("R1 FC=2 Rule=set_value UnitID=%d Address=0x%X NewValue(after read)=0x%X", pdu.UnitId, currentAddr, newValue)))
 		}
 
 		// Convert register value to boolean (0x0000 = false, anything else = true)

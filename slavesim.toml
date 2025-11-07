@@ -24,6 +24,26 @@ address = "localhost:503"
 id = 101
 address = "localhost:502"
 
+  # Rules define behavioral patterns for this slave
+  # When register 0x7e33 is read, automatically set its value to false (0x0000)
+  [[slave.rule]]
+  trigger = "on_read"
+  register = 0x7e33
+  action = "set_value"
+  value = 0x0000
+
+  # Example: Toggle a register value each time it's written
+  # [[slave.rule]]
+  # trigger = "on_write"
+  # register = 0x1000
+  # action = "toggle"
+
+  # Example: Increment a counter register on every read
+  # [[slave.rule]]
+  # trigger = "on_read"
+  # register = 0x2000
+  # action = "increment"
+
 # Example: Add more slaves as needed
 # [[slave]]
 # id = 102

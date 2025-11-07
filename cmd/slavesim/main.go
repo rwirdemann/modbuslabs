@@ -39,19 +39,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	var handler []modbuslabs.TransportHandler
-	var slavesToConnect []struct {
-		id      uint8
-		address string
-	}
-
 	cfg, err := config.Load(*configFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
 	}
+	slog.Info("Configuration loaded", "transports", len(cfg.Transports), "slaves", len(cfg.Slaves))
 
 	// Create transport handlers from config
+	var handler []modbuslabs.TransportHandler
 	for _, t := range cfg.Transports {
 		var h modbuslabs.TransportHandler
 		var err error
@@ -60,27 +56,17 @@ func main() {
 		case "tcp":
 			h, err = tcp.NewHandler(fmt.Sprintf("tcp://%s", t.Address), protocolPort)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error creating TCP handler for %s: %v\n", t.Address, err)
+				_, _ = fmt.Fprintf(os.Stderr, "Error creating TCP handler for %s: %v\n", t.Address, err)
 				os.Exit(1)
 			}
 		case "rtu":
 			h = rtu.NewHandler(t.Address, protocolPort)
 		default:
-			fmt.Fprintf(os.Stderr, "Unknown transport type: %s\n", t.Type)
+			_, _ = fmt.Fprintf(os.Stderr, "Unknown transport type: %s\n", t.Type)
 			os.Exit(1)
 		}
 		handler = append(handler, h)
 	}
-
-	// Collect slaves from config
-	for _, s := range cfg.Slaves {
-		slavesToConnect = append(slavesToConnect, struct {
-			id      uint8
-			address string
-		}{id: s.ID, address: s.Address})
-	}
-
-	slog.Info("Configuration loaded", "transports", len(cfg.Transports), "slaves", len(cfg.Slaves))
 
 	modbus := modbuslabs.NewBus(handler, protocolPort)
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -95,9 +81,9 @@ func main() {
 	go driver.Start(cancel)
 
 	// Connect all configured slaves
-	for _, s := range slavesToConnect {
-		modbus.ConnectSlave(s.id, s.address)
-		slog.Debug("Connected slave", "id", s.id, "address", s.address)
+	for _, s := range cfg.Slaves {
+		modbus.ConnectSlaveWithConfig(s, s.Address)
+		slog.Info("Connected slave", "id", s.ID, "address", s.Address)
 	}
 
 	<-ctx.Done()
