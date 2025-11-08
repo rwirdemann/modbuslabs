@@ -263,8 +263,12 @@ func (h *Bus) Status() string {
 				connectStatus = "connected"
 			}
 			status += fmt.Sprintf("\n    - Unit %d: %s", unitID, connectStatus)
-			for addr, value := range slave.registers {
-				status += fmt.Sprintf("\n       % X => % X", addr, value)
+			status += slave.ruleEngine.Status()
+			if len(slave.registers) > 0 {
+				for addr, value := range slave.registers {
+					status += "\n      Registers:"
+					status += fmt.Sprintf("\n      - 0x%X => 0x%X", addr, value)
+				}
 			}
 		}
 	}

@@ -77,6 +77,19 @@ func (e *Engine) apply(register uint16, currentValue uint16, triggerType Trigger
 	return value, modified
 }
 
+func (e *Engine) Status() string {
+	if len(e.rules) == 0 {
+		return ""
+	}
+	s := "\n      Rules:"
+	for register, rules := range e.rules {
+		for i, r := range rules {
+			s += fmt.Sprintf("\n      - R%d: 0x%04X => %s %s", i+1, register, r.Trigger, r.Action)
+		}
+	}
+	return s
+}
+
 func (e *Engine) shouldTrigger(ruleTrigger string, triggerType TriggerType) bool {
 	if ruleTrigger == string(TriggerOnReadWrite) {
 		return true
