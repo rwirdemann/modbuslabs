@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/rwirdemann/modbuslabs"
@@ -17,9 +18,15 @@ import (
 )
 
 func main() {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "."
+	}
+	defaultConfig := filepath.Join(homeDir, ".config", "slavesim", "slavesim.toml")
+
 	debug := flag.Bool("debug", false, "set log level to debug")
 	out := flag.String("out", "console", "the output channel (console)")
-	configFile := flag.String("config", "slavesim.toml", "path to TOML configuration file)")
+	configFile := flag.String("config", defaultConfig, "path to TOML configuration file)")
 	flag.Parse()
 
 	if *debug {
