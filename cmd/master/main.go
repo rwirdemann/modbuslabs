@@ -58,7 +58,7 @@ func main() {
 
 	client := bmodbus.NewClient(handler)
 	switch *fc {
-	case int(modbus.FC2ReadDiscreteInput):
+	case int(modbus.FC2ReadDiscreteRegisters):
 		bb, err := client.ReadDiscreteInputs(addrHex.Uint16(), uint16(*quantity))
 		if err != nil {
 			log.Fatal(err)

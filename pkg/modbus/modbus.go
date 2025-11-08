@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	FC2ReadDiscreteInput       uint8 = 0x02
+	FC2ReadDiscreteRegisters   uint8 = 0x02
 	FC4ReadInputRegisters      uint8 = 0x04
 	FC5WriteSingleCoil         uint8 = 0x05
 	FC6WriteSingleRegister     uint8 = 0x06

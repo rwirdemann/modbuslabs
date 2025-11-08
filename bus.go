@@ -82,7 +82,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 
 	addr := modbus.BytesToUint16(pdu.Payload[0:2])
 	switch pdu.FunctionCode {
-	case modbus.FC2ReadDiscreteInput:
+	case modbus.FC2ReadDiscreteRegisters:
 		return h.processFC2(slave, addr, pdu)
 	}
 

@@ -26,8 +26,14 @@ func main() {
 
 	debug := flag.Bool("debug", false, "set log level to debug")
 	out := flag.String("out", "console", "the output channel (console)")
-	configFile := flag.String("config", defaultConfig, "path to TOML configuration file)")
+	configFile := flag.String("config", defaultConfig, "path to TOML configuration file")
+	help := flag.Bool("help", false, "Print this help page.")
 	flag.Parse()
+
+	if *help {
+		flag.Usage()
+		os.Exit(0)
+	}
 
 	if *debug {
 		slog.SetLogLoggerLevel(slog.LevelDebug)
