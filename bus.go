@@ -185,6 +185,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		valueIndex := 5 // Start after: addr(2) + quantity(2) + byteCount(1)
 		values := ""
 		for i := range quantity {
+			println("hello")
 			currentAddr := addr + i
 			value := modbus.BytesToUint16(pdu.Payload[valueIndex : valueIndex+2])
 			slave.registers[currentAddr] = value

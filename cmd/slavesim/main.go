@@ -17,11 +17,26 @@ import (
 	"github.com/rwirdemann/modbuslabs/tcp"
 )
 
-func main() {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		homeDir = "."
+// getHomeDir returns the home directory, handling sudo correctly. When running
+// with sudo, it tries to get the original user's home directory.
+func getHomeDir() string {
+	// First check if SUDO_USER is set (program running with sudo)
+	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+		// Construct home directory from SUDO_USER
+		return filepath.Join("/home", sudoUser)
 	}
+
+	// Try to get home directory from os package
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		return homeDir
+	}
+
+	// Last resort fallback
+	return "."
+}
+
+func main() {
+	homeDir := getHomeDir()
 	defaultConfig := filepath.Join(homeDir, ".config", "slavesim", "slavesim.toml")
 
 	debug := flag.Bool("debug", false, "set log level to debug")
