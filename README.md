@@ -1,8 +1,8 @@
 # Modbuslabs
 
-## Slavesim
+## VirtualONS
 
-Slavesim is a cross-platform Modbus slave simulator. Slavesim serves the development of Modbus master applications without requiring actual Modbus devices. Slavesim simulates up to two buses, on which multiple Modbus slaves can be connected. Slaves can be connected and disconnected independently of each other, so that master applications can be developed for handling fragile connections. Each slave manages its own register tables, which can be written to and read from by the master.
+VirtualONS is a cross-platform Modbus slave simulator. Slavesim serves the development of Modbus master applications without requiring actual Modbus devices. Slavesim simulates up to two buses, on which multiple Modbus slaves can be connected. Slaves can be connected and disconnected independently of each other, so that master applications can be developed for handling fragile connections. Each slave manages its own register tables, which can be written to and read from by the master.
 
 ## Configuration
 
@@ -14,12 +14,12 @@ Slavesim searches for its configurtion file slavesim.toml in $HOME/.config/slave
 
 ### Design
 
-![slavesim](docs/slavesim.png)
+![virtualons](docs/core-design.drawio.png)
 
 ### Usage
 
 
-#### Run slavesim (aka LDSMock)
+#### Run slavesim (aka LDSMock, virtualONS)
 ```
 sudo run cmd/slavesim/main.go
 ```

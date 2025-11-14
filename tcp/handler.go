@@ -12,7 +12,6 @@ import (
 
 	"github.com/rwirdemann/modbuslabs"
 	"github.com/rwirdemann/modbuslabs/message"
-	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
 
 const (
@@ -119,7 +118,7 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 	res := processPDU(*pdu)
 
 	if res != nil {
-		payload := modbus.AssembleMBAPFrame(txnId, res)
+		payload := modbuslabs.AssembleMBAPFrame(txnId, res)
 		if _, err := conn.Write(payload); err != nil {
 			return err
 		}
@@ -142,7 +141,7 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 // 00 02      - Quantity (2 Register)
 //
 // Returns the header, [PDU] and transaction id on success.
-func readMBAPFrame(conn io.Reader) ([]byte, *modbus.PDU, uint16, error) {
+func readMBAPFrame(conn io.Reader) ([]byte, *modbuslabs.PDU, uint16, error) {
 
 	// read the MBAP header
 	header := make([]byte, MBAPHeaderLength)
@@ -189,7 +188,7 @@ func readMBAPFrame(conn io.Reader) ([]byte, *modbus.PDU, uint16, error) {
 	}
 
 	// store unit id, function code and payload in the PDU object
-	pdu := &modbus.PDU{
+	pdu := &modbuslabs.PDU{
 		UnitId:       unitId,
 		FunctionCode: rxbuf[0],
 		Payload:      rxbuf[1:],

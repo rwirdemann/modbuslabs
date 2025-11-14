@@ -7,42 +7,35 @@ import (
 	"sync"
 
 	"github.com/rwirdemann/modbuslabs/config"
+	"github.com/rwirdemann/modbuslabs/encoding"
 	"github.com/rwirdemann/modbuslabs/message"
-	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 	"github.com/rwirdemann/modbuslabs/rules"
 )
 
-type slave struct {
-	unitID     uint8
-	registers  map[uint16]uint16
-	connected  bool
-	ruleEngine *rules.Engine
-}
-
-// Bus represents a Modbus bus.
-type Bus struct {
+// Gateway represents a gateway with modbus devices.
+type Gateway struct {
 	handler      []TransportHandler
 	protocolPort ProtocolPort
-	slaves       map[string]map[uint8]*slave // map[url]map[unitID]slave
+	slaves       map[string]map[uint8]*Slave // map[url]map[unitID]slave
 	slaveLock    *sync.Mutex
 }
 
-// NewBus creates a new Modbus bus.
-func NewBus(handler []TransportHandler, protocolPort ProtocolPort) *Bus {
-	b := &Bus{
+// NewGateway creates a new gateway.
+func NewGateway(handler []TransportHandler, protocolPort ProtocolPort) *Gateway {
+	b := &Gateway{
 		handler:      handler,
 		protocolPort: protocolPort,
-		slaves:       make(map[string]map[uint8]*slave),
+		slaves:       make(map[string]map[uint8]*Slave),
 		slaveLock:    new(sync.Mutex),
 	}
 	for _, h := range b.handler {
-		b.slaves[h.Description()] = make(map[uint8]*slave)
+		b.slaves[h.Description()] = make(map[uint8]*Slave)
 	}
 	return b
 }
 
-// Start starts the Modbus bus.
-func (m *Bus) Start(ctx context.Context) error {
+// Start starts the gateway.
+func (m *Gateway) Start(ctx context.Context) error {
 	for _, h := range m.handler {
 		if err := h.Start(ctx, m.processPDU); err != nil {
 			return err
@@ -51,15 +44,15 @@ func (m *Bus) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the Modbus bus.
-func (m *Bus) Stop() error {
+// Stop stops gateway.
+func (m *Gateway) Stop() error {
 	for _, h := range m.handler {
 		h.Stop()
 	}
 	return nil
 }
 
-func (b *Bus) findSlave(unitID uint8) (*slave, bool) {
+func (b *Gateway) findSlave(unitID uint8) (*Slave, bool) {
 	for _, h := range b.handler {
 		if s, exists := b.slaves[h.Description()][unitID]; exists {
 			slog.Debug("slave exists", "unitID", unitID)
@@ -71,7 +64,7 @@ func (b *Bus) findSlave(unitID uint8) (*slave, bool) {
 	return nil, false
 }
 
-func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
+func (h *Gateway) processPDU(pdu PDU) *PDU {
 	h.slaveLock.Lock()
 	defer h.slaveLock.Unlock()
 	slave, exists := h.findSlave(pdu.UnitId)
@@ -80,17 +73,17 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		return nil
 	}
 
-	addr := modbus.BytesToUint16(pdu.Payload[0:2])
 	switch pdu.FunctionCode {
-	case modbus.FC2ReadDiscreteRegisters:
-		return h.processFC2(slave, addr, pdu)
+	case FC2ReadDiscreteRegisters:
+		return slave.Process(pdu)
 	}
 
-	if pdu.FunctionCode == modbus.FC4ReadInputRegisters {
-		quantity := modbus.BytesToUint16(pdu.Payload[2:4])
+	addr := encoding.BytesToUint16(pdu.Payload[0:2])
+	if pdu.FunctionCode == FC4ReadInputRegisters {
+		quantity := encoding.BytesToUint16(pdu.Payload[2:4])
 		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%X Quantity=%d", pdu.FunctionCode, pdu.UnitId, addr, quantity)))
 		byteCount := uint8(quantity * 2)
-		res := &modbus.PDU{
+		res := &PDU{
 			UnitId:       pdu.UnitId,
 			FunctionCode: pdu.FunctionCode,
 			Payload:      make([]byte, 1+byteCount), // byte count + register values
@@ -117,7 +110,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 			}
 
 			// Write register value as 2 bytes (big endian) at correct position
-			copy(res.Payload[payloadIndex:payloadIndex+2], modbus.Uint16ToBytes(value))
+			copy(res.Payload[payloadIndex:payloadIndex+2], encoding.Uint16ToBytes(value))
 			payloadIndex += 2
 		}
 
@@ -125,17 +118,17 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		return res
 	}
 
-	if pdu.FunctionCode == modbus.FC5WriteSingleCoil {
+	if pdu.FunctionCode == FC5WriteSingleCoil {
 		// FC5 payload format: [coilAddr(2 bytes)][value(2 bytes)]. Value is 0xFF00 for ON, 0x0000 for OFF
 		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "pdu", pdu)
-		value := modbus.BytesToUint16(pdu.Payload[2:4])
+		value := encoding.BytesToUint16(pdu.Payload[2:4])
 
 		// Store the coil value (0xFF00 for true, 0x0000 for false)
 		slave.registers[addr] = value
 		slog.Debug("FC5 Write Single Coil", "unitID", pdu.UnitId, "addr", fmt.Sprintf("%X", addr), "value", fmt.Sprintf("%X", value))
 
 		// FC5 response: echo back the request (coil address + value)
-		res := &modbus.PDU{
+		res := &PDU{
 			UnitId:       pdu.UnitId,
 			FunctionCode: pdu.FunctionCode,
 			Payload:      pdu.Payload[0:4], // Echo back address and value
@@ -144,16 +137,16 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		return res
 	}
 
-	if pdu.FunctionCode == modbus.FC6WriteSingleRegister {
+	if pdu.FunctionCode == FC6WriteSingleRegister {
 		// FC6 payload format: [regAddr(2 bytes)][value(2 bytes)]
-		value := modbus.BytesToUint16(pdu.Payload[2:4])
+		value := encoding.BytesToUint16(pdu.Payload[2:4])
 
 		// Store the value
 		slave.registers[addr] = value
 		slog.Debug("FC6 Write Single Register", "unitID", pdu.UnitId, "addr", addr, "value", value)
 
 		// FC6 response: echo back the request (register address + value)
-		res := &modbus.PDU{
+		res := &PDU{
 			UnitId:       pdu.UnitId,
 			FunctionCode: pdu.FunctionCode,
 			Payload:      pdu.Payload[0:4], // Echo back address and value
@@ -161,10 +154,10 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		return res
 	}
 
-	if pdu.FunctionCode == modbus.FC16WriteMultipleRegisters {
+	if pdu.FunctionCode == FC16WriteMultipleRegisters {
 		// FC16 payload format: [startAddr(2 bytes)][quantity(2 bytes)][byteCount(1 byte)][values(N bytes)]
 		// addr and quantity already extracted at the beginning
-		quantity := modbus.BytesToUint16(pdu.Payload[2:4])
+		quantity := encoding.BytesToUint16(pdu.Payload[2:4])
 		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "quantitiy", quantity, "pdu", pdu)
 		byteCount := pdu.Payload[4]
 
@@ -185,9 +178,8 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		valueIndex := 5 // Start after: addr(2) + quantity(2) + byteCount(1)
 		values := ""
 		for i := range quantity {
-			println("hello")
 			currentAddr := addr + i
-			value := modbus.BytesToUint16(pdu.Payload[valueIndex : valueIndex+2])
+			value := encoding.BytesToUint16(pdu.Payload[valueIndex : valueIndex+2])
 			slave.registers[currentAddr] = value
 			slog.Debug("FC16 Write Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("%X", currentAddr), "value", fmt.Sprintf("%X", value))
 			if len(values) > 0 {
@@ -202,7 +194,7 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 		h.protocolPort.InfoX(m)
 
 		// FC16 response: echo back starting address and quantity
-		res := &modbus.PDU{
+		res := &PDU{
 			UnitId:       pdu.UnitId,
 			FunctionCode: pdu.FunctionCode,
 			Payload:      pdu.Payload[0:4], // Echo back address and quantity
@@ -214,35 +206,23 @@ func (h *Bus) processPDU(pdu modbus.PDU) *modbus.PDU {
 	return nil
 }
 
-func (h *Bus) ConnectSlave(unitID uint8, url string) {
-	if _, exists := h.slaves[url][unitID]; !exists {
-		h.slaves[url][unitID] = &slave{
-			registers:  make(map[uint16]uint16),
-			ruleEngine: rules.NewEngine(nil), // No rules
-		}
+func (g *Gateway) ConnectSlave(unitID uint8, url string) {
+	if _, exists := g.slaves[url][unitID]; !exists {
+		g.slaves[url][unitID] = NewSlave(unitID, true, rules.NewEngine(nil), g.protocolPort)
+		slog.Debug("slave connected", "unitID", unitID, "url", url)
 	}
-	h.slaves[url][unitID].connected = true
-	slog.Debug("slave connected", "unitID", unitID, "url", url)
 }
 
 // ConnectSlaveWithConfig connects a slave with configuration including rules
-func (h *Bus) ConnectSlaveWithConfig(slaveConfig config.Slave, url string) {
+func (h *Gateway) ConnectSlaveWithConfig(slaveConfig config.Slave, url string) {
 	if _, exists := h.slaves[url][slaveConfig.ID]; !exists {
 		ruleEngine := rules.NewEngine(slaveConfig.Rules)
-		h.slaves[url][slaveConfig.ID] = &slave{
-			unitID:     slaveConfig.ID,
-			registers:  make(map[uint16]uint16),
-			ruleEngine: ruleEngine,
-		}
-		slog.Info("Slave connected with rules",
-			"unitID", slaveConfig.ID,
-			"url", url,
-			"ruleCount", len(slaveConfig.Rules))
+		h.slaves[url][slaveConfig.ID] = NewSlave(slaveConfig.ID, true, ruleEngine, h.protocolPort)
+		slog.Info("Slave connected with rules", "unitID", slaveConfig.ID, "url", url, "ruleCount", len(slaveConfig.Rules))
 	}
-	h.slaves[url][slaveConfig.ID].connected = true
 }
 
-func (h *Bus) DisconnectSlave(unitID uint8) {
+func (h *Gateway) DisconnectSlave(unitID uint8) {
 	for _, v := range h.slaves {
 		if _, exists := v[unitID]; exists {
 			v[unitID].connected = false
@@ -250,7 +230,7 @@ func (h *Bus) DisconnectSlave(unitID uint8) {
 	}
 }
 
-func (h *Bus) Status() string {
+func (h *Gateway) Status() string {
 	var status string
 	status = "Configuration:"
 	for i, p := range h.handler {
@@ -276,58 +256,6 @@ func (h *Bus) Status() string {
 	return status
 }
 
-// Response Payload:  [Byte Count] [Status Byte 1] [Status Byte 2] ... Each
-// status byte contains up to 8 coils.
-func (h *Bus) processFC2(slave *slave, registerAddr uint16, pdu modbus.PDU) *modbus.PDU {
-	quantity := modbus.BytesToUint16(pdu.Payload[2:4])
-	h.info(message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%X Quantity=%d", pdu.FunctionCode, pdu.UnitId, registerAddr, quantity)))
-	slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", registerAddr), "quantitiy", quantity, "pdu", pdu)
-	var values = make([]bool, quantity)
-
-	// Read values from registers map
-	for i := range quantity {
-		currentAddr := registerAddr + i
-		var value uint16
-
-		if regValue, exists := slave.registers[currentAddr]; exists {
-			value = regValue
-			slog.Debug("FC2 reading from map", "unitID", pdu.UnitId, "addr", currentAddr, "value", value)
-		} else {
-			slog.Debug("no value for discrete input", "addr", currentAddr)
-		}
-
-		// Apply read rules. The rule is applied after the register value has been read
-		// from the store. The read value is the value that is going to be changed after
-		// it has been returned to the master. The new value is update in the store.
-		if newValue, modified := slave.ruleEngine.ApplyRead(currentAddr, value); modified {
-			slave.registers[currentAddr] = newValue
-			h.info(message.NewEncoded(fmt.Sprintf("R1 FC=2 Rule=set_value UnitID=%d Address=0x%X NewValue(after read)=0x%X", pdu.UnitId, currentAddr, newValue)))
-		}
-
-		// Convert register value to boolean (0x0000 = false, anything else = true)
-		// For coils written with FC5, 0xFF00 = true
-		values[i] = value != 0x0000
-	}
-
-	resCount := len(values)
-	res := &modbus.PDU{
-		UnitId:       pdu.UnitId,
-		FunctionCode: pdu.FunctionCode,
-		Payload:      []byte{0},
-	}
-
-	// byte count (1 byte for 8 coils)
-	res.Payload[0] = uint8(resCount / 8)
-	if resCount%8 != 0 {
-		res.Payload[0]++
-	}
-	h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("RX FC=%d UnitID=%d Address=0x%X Quantity=%d Values=%v", pdu.FunctionCode, pdu.UnitId, registerAddr, quantity, values)))
-
-	// coil values
-	res.Payload = append(res.Payload, modbus.EncodeBools(values)...)
-	return res
-}
-
-func (b *Bus) info(m message.Message) {
+func (b *Gateway) info(m message.Message) {
 	b.protocolPort.InfoX(m)
 }

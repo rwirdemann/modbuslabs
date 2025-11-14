@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"github.com/rwirdemann/modbuslabs"
@@ -22,8 +23,14 @@ import (
 func getHomeDir() string {
 	// First check if SUDO_USER is set (program running with sudo)
 	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
-		// Construct home directory from SUDO_USER
-		return filepath.Join("/home", sudoUser)
+		// Construct home directory from SUDO_USER, platform-aware
+		var homeBase string
+		if runtime.GOOS == "darwin" {
+			homeBase = "/Users"
+		} else {
+			homeBase = "/home"
+		}
+		return filepath.Join(homeBase, sudoUser)
 	}
 
 	// Try to get home directory from os package
@@ -96,7 +103,7 @@ func main() {
 		handler = append(handler, h)
 	}
 
-	modbus := modbuslabs.NewBus(handler, protocolPort)
+	modbus := modbuslabs.NewGateway(handler, protocolPort)
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 

@@ -9,7 +9,6 @@ import (
 
 	"github.com/goburrow/serial"
 	"github.com/rwirdemann/modbuslabs"
-	"github.com/rwirdemann/modbuslabs/pkg/modbus"
 )
 
 // Start starts the RTU handler.
@@ -98,7 +97,7 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 			// 2. Die Response ist **deutlich kürzer** als der Request (nur 8 Bytes statt 13 Bytes)
 			// 3. Der Slave bestätigt damit: "Ich habe 2 Register ab Adresse 0x9002 erfolgreich geschrieben"
 			if n > 0 {
-				pdu := &modbus.PDU{}
+				pdu := &modbuslabs.PDU{}
 				data := buffer[:n]
 				slog.Debug("Received data from serial port", "n", n, "data", fmt.Sprintf("% X", data))
 				if len(data) < 4 {
