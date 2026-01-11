@@ -25,6 +25,8 @@ func (s *Slave) Process(pdu PDU) *PDU {
 	switch pdu.FunctionCode {
 	case FC2ReadDiscreteRegisters:
 		return s.processFC2(pdu)
+	case FC6WriteSingleRegister:
+		return s.processFC6(pdu)
 	}
 	return nil
 }
@@ -78,5 +80,34 @@ func (h *Slave) processFC2(pdu PDU) *PDU {
 
 	// coil values
 	res.Payload = append(res.Payload, encoding.EncodeBools(values)...)
+	return res
+}
+
+// FC6 payload format: [regAddr(2 bytes)][value(2 bytes)]
+func (s *Slave) processFC6(pdu PDU) *PDU {
+	addr := encoding.BytesToUint16(pdu.Payload[0:2])
+	value := encoding.BytesToUint16(pdu.Payload[2:4])
+
+	s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%X Value=0x%X", pdu.FunctionCode, pdu.UnitId, addr, value)))
+
+	// Store the value
+	s.registers[addr] = value
+	slog.Debug("FC6 Write Single Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%04X", value))
+
+	// Apply write rules - these may trigger side-effects like writing to other registers
+	if newValue, writtenRegister, modified := s.ruleEngine.ApplyWriteWithRegisters(addr, value, s.registers); modified {
+		s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("R1 FC=6 Rule applied UnitID=%d Address=0x%X NewValue=0x%X",
+			pdu.UnitId, writtenRegister, newValue)))
+	}
+
+	s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("RX FC=%d UnitID=%d Address=0x%X Value=0x%X",
+		pdu.FunctionCode, pdu.UnitId, addr, value)))
+
+	// FC6 response: echo back the request (register address + value)
+	res := &PDU{
+		UnitId:       pdu.UnitId,
+		FunctionCode: pdu.FunctionCode,
+		Payload:      pdu.Payload[0:4], // Echo back address and value
+	}
 	return res
 }

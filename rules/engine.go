@@ -41,10 +41,11 @@ func (e *Engine) ApplyRead(register uint16, currentValue uint16) (uint16, bool) 
 	return e.apply(register, currentValue, TriggerOnRead)
 }
 
-// ApplyWrite applies all write-triggered rules for the given register
+// ApplyWriteWithRegisters applies all write-triggered rules for the given register with access to the register map
+// This allows rules to have side-effects like writing to other registers
 // Returns the modified value and true if any rules were applied
-func (e *Engine) ApplyWrite(register uint16, currentValue uint16) (uint16, bool) {
-	return e.apply(register, currentValue, TriggerOnWrite)
+func (e *Engine) ApplyWriteWithRegisters(register uint16, currentValue uint16, registers map[uint16]uint16) (uint16, uint16, bool) {
+	return e.applyWrite(register, currentValue, registers)
 }
 
 func (e *Engine) apply(register uint16, currentValue uint16, triggerType TriggerType) (uint16, bool) {
@@ -63,7 +64,7 @@ func (e *Engine) apply(register uint16, currentValue uint16, triggerType Trigger
 		}
 
 		oldValue := value
-		value = e.executeAction(rule, value)
+		value = e.executeAction(rule, value, nil)
 		modified = true
 
 		slog.Debug("Rule executed",
@@ -75,6 +76,47 @@ func (e *Engine) apply(register uint16, currentValue uint16, triggerType Trigger
 	}
 
 	return value, modified
+}
+
+func (e *Engine) applyWrite(register uint16, currentValue uint16, registers map[uint16]uint16) (uint16, uint16, bool) {
+	rules, exists := e.rules[register]
+	if !exists {
+		return currentValue, 0, false
+	}
+
+	modified := false
+	var writtenRegister uint16
+	value := currentValue
+
+	for _, rule := range rules {
+		// Check if this rule should be triggered
+		if !e.shouldTrigger(rule.Trigger, TriggerOnWrite) {
+			continue
+		}
+
+		// Conditional check: If rule.Value is set, only execute if currentValue matches
+		if rule.Value != nil && *rule.Value != currentValue {
+			slog.Debug("Rule condition not met",
+				"register", fmt.Sprintf("0x%04X", register),
+				"expectedValue", fmt.Sprintf("0x%04X", *rule.Value),
+				"actualValue", fmt.Sprintf("0x%04X", currentValue))
+			continue
+		}
+
+		oldValue := value
+		value = e.executeAction(rule, value, registers)
+		modified = true
+		writtenRegister = *rule.WriteRegister
+
+		slog.Debug("Rule executed",
+			"register", fmt.Sprintf("0x%04X", register),
+			"trigger", rule.Trigger,
+			"action", rule.Action,
+			"oldValue", fmt.Sprintf("0x%04X", oldValue),
+			"newValue", fmt.Sprintf("0x%04X", value))
+	}
+
+	return value, writtenRegister, modified
 }
 
 func (e *Engine) Status() string {
@@ -97,10 +139,13 @@ func (e *Engine) shouldTrigger(ruleTrigger string, triggerType TriggerType) bool
 	return ruleTrigger == string(triggerType)
 }
 
-func (e *Engine) executeAction(rule config.Rule, currentValue uint16) uint16 {
+func (e *Engine) executeAction(rule config.Rule, currentValue uint16, registers map[uint16]uint16) uint16 {
 	switch rule.Action {
 	case "set_value":
-		return rule.Value
+		if rule.Value != nil {
+			return *rule.Value
+		}
+		return currentValue
 
 	case "increment":
 		return currentValue + 1
@@ -117,6 +162,18 @@ func (e *Engine) executeAction(rule config.Rule, currentValue uint16) uint16 {
 			return 0xFF00
 		}
 		return 0x0000
+
+	case "write_register":
+		// Side-effect action: write to another register
+		if registers != nil && rule.WriteRegister != nil && rule.WriteValue != nil {
+			registers[*rule.WriteRegister] = *rule.WriteValue
+			slog.Debug("Rule side-effect",
+				"targetRegister", fmt.Sprintf("0x%04X", *rule.WriteRegister),
+				"writtenValue", fmt.Sprintf("0x%04X", *rule.WriteValue))
+			return *rule.WriteValue
+		}
+		// Return the original value unchanged for this register
+		return currentValue
 
 	default:
 		slog.Warn("Unknown action", "action", rule.Action)

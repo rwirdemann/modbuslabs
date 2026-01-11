@@ -74,7 +74,7 @@ func (h *Gateway) processPDU(pdu PDU) *PDU {
 	}
 
 	switch pdu.FunctionCode {
-	case FC2ReadDiscreteRegisters:
+	case FC2ReadDiscreteRegisters, FC6WriteSingleRegister:
 		return slave.Process(pdu)
 	}
 
@@ -134,23 +134,6 @@ func (h *Gateway) processPDU(pdu PDU) *PDU {
 			Payload:      pdu.Payload[0:4], // Echo back address and value
 		}
 		h.protocolPort.Info(fmt.Sprintf("FC=%X UnitID=%d Address=%X Value=%X", pdu.FunctionCode, pdu.UnitId, addr, value))
-		return res
-	}
-
-	if pdu.FunctionCode == FC6WriteSingleRegister {
-		// FC6 payload format: [regAddr(2 bytes)][value(2 bytes)]
-		value := encoding.BytesToUint16(pdu.Payload[2:4])
-
-		// Store the value
-		slave.registers[addr] = value
-		slog.Debug("FC6 Write Single Register", "unitID", pdu.UnitId, "addr", addr, "value", value)
-
-		// FC6 response: echo back the request (register address + value)
-		res := &PDU{
-			UnitId:       pdu.UnitId,
-			FunctionCode: pdu.FunctionCode,
-			Payload:      pdu.Payload[0:4], // Echo back address and value
-		}
 		return res
 	}
 

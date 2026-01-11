@@ -32,6 +32,14 @@ address = "localhost:502"
   action = "set_value"
   value = 0x0000
 
+  [[slave.rule]]
+  trigger = "on_write"
+  register = 0xA66D            # befehls register (42605)
+  value = 1                    # firmware update
+  action = "write_register"
+  write_register = 0xA668     # status register (42600)
+  write_value = 0x1000        # ready for upload
+
   # Example: Toggle a register value each time it's written
   # [[slave.rule]]
   # trigger = "on_write"

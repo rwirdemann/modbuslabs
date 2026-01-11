@@ -28,10 +28,12 @@ type Slave struct {
 
 // Rule defines a behavior rule for a slave
 type Rule struct {
-	Trigger  string `toml:"trigger"`  // "on_read", "on_write", "on_read_write"
-	Register uint16 `toml:"register"` // Register address (hex or decimal)
-	Action   string `toml:"action"`   // "set_value", "increment", "decrement", "toggle"
-	Value    uint16 `toml:"value"`    // Value for set_value action
+	Trigger       string  `toml:"trigger"`        // "on_read", "on_write", "on_read_write"
+	Register      uint16  `toml:"register"`       // Register address (hex or decimal)
+	Action        string  `toml:"action"`         // "set_value", "increment", "decrement", "toggle", "write_register"
+	Value         *uint16 `toml:"value"`          // Optional: Value for set_value action OR condition value for on_write trigger
+	WriteRegister *uint16 `toml:"write_register"` // Optional: Target register for write_register action
+	WriteValue    *uint16 `toml:"write_value"`    // Optional: Value to write for write_register action
 }
 
 // Load reads and parses a TOML configuration file
@@ -113,13 +115,28 @@ func (r *Rule) Validate() error {
 	}
 
 	validActions := map[string]bool{
-		"set_value": true,
-		"increment": true,
-		"decrement": true,
-		"toggle":    true,
+		"set_value":      true,
+		"increment":      true,
+		"decrement":      true,
+		"toggle":         true,
+		"write_register": true,
 	}
 	if !validActions[r.Action] {
-		return fmt.Errorf("invalid action %q, must be one of: set_value, increment, decrement, toggle", r.Action)
+		return fmt.Errorf("invalid action %q, must be one of: set_value, increment, decrement, toggle, write_register", r.Action)
+	}
+
+	// Validate action-specific requirements
+	if r.Action == "set_value" && r.Value == nil {
+		return fmt.Errorf("set_value action requires 'value' field")
+	}
+
+	if r.Action == "write_register" {
+		if r.WriteRegister == nil {
+			return fmt.Errorf("write_register action requires 'write_register' field")
+		}
+		if r.WriteValue == nil {
+			return fmt.Errorf("write_register action requires 'write_value' field")
+		}
 	}
 
 	return nil
