@@ -91,7 +91,7 @@ func main() {
 		if *quantity == 2 {
 			high := uint16(bb[0])<<8 | uint16(bb[1])
 			low := uint16(bb[2])<<8 | uint16(bb[3])
-			floatValue := modbuslabs.RegistersToFloat32(high, low)
+			floatValue := encoding.RegistersToFloat32(high, low)
 			fmt.Printf("\nFloat32 interpretation: %.6f\n", floatValue)
 		}
 	case int(modbuslabs.FC5WriteSingleCoil):
@@ -128,7 +128,7 @@ func main() {
 		}
 
 		// Convert float32 to two registers
-		high, low := modbuslabs.Float32ToRegisters(float32(f))
+		high, low := encoding.Float32ToRegisters(float32(f))
 		fmt.Printf("Writing float32 value %.6f as registers: 0x%04X, 0x%04X\n", f, high, low)
 
 		// Convert register values to bytes (2 registers = 4 bytes)
