@@ -54,7 +54,7 @@ func (h *Slave) processFC2(pdu PDU) *PDU {
 		// Apply read rules. The rule is applied after the register value has been read
 		// from the store. The read value is the value that is going to be changed after
 		// it has been returned to the master. The new value is update in the store.
-		if newValue, modified := h.ruleEngine.ApplyRead(currentAddr, value); modified {
+		if newValue, modified := h.ruleEngine.ApplyReadRules(currentAddr, value); modified {
 			h.registers[currentAddr] = newValue
 			h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("R1 FC=2 Rule=set_value UnitID=%d Address=0x%X NewValue(after read)=0x%X", pdu.UnitId, currentAddr, newValue)))
 		}
@@ -90,14 +90,12 @@ func (s *Slave) processFC6(pdu PDU) *PDU {
 
 	s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%X Value=0x%X", pdu.FunctionCode, pdu.UnitId, addr, value)))
 
-	// Store the value
 	s.registers[addr] = value
 	slog.Debug("FC6 Write Single Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%04X", value))
 
-	// Apply write rules - these may trigger side-effects like writing to other registers
-	if newValue, writtenRegister, modified := s.ruleEngine.ApplyWriteWithRegisters(addr, value, s.registers); modified {
-		s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("R1 FC=6 Rule applied UnitID=%d Address=0x%X NewValue=0x%X",
-			pdu.UnitId, writtenRegister, newValue)))
+	if targetRegister, targetValue, applied := s.ruleEngine.ApplyWriteRules(addr, value, s.registers); applied {
+		s.registers[targetRegister] = targetValue
+		s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("R1 FC=6 Rule applied UnitID=%d WriteAddress=0x%X NewValue=0x%X", pdu.UnitId, targetRegister, targetValue)))
 	}
 
 	s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("RX FC=%d UnitID=%d Address=0x%X Value=0x%X",
