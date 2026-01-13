@@ -1,6 +1,7 @@
 package encoding
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -32,4 +33,18 @@ func (h *Hex) set(value string) error {
 
 func (h *Hex) String() string {
 	return fmt.Sprintf("0x%X", uint64(*h))
+}
+
+// HexStringToBytes converts a hex string (e.g., "00FF1234") to a byte array.
+// The string should not have a "0x" prefix.
+func HexStringToBytes(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "0x")
+	s = strings.TrimPrefix(s, "0X")
+
+	if len(s)%2 != 0 {
+		return nil, fmt.Errorf("hex string must have even length")
+	}
+
+	return hex.DecodeString(s)
 }

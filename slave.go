@@ -27,6 +27,8 @@ func (s *Slave) Process(pdu PDU) *PDU {
 		return s.processFC2(pdu)
 	case FC6WriteSingleRegister:
 		return s.processFC6(pdu)
+	case FC17ReadWriteMultipleRegisters:
+		return s.processFC17(pdu)
 	}
 	return nil
 }
@@ -106,6 +108,74 @@ func (s *Slave) processFC6(pdu PDU) *PDU {
 		UnitId:       pdu.UnitId,
 		FunctionCode: pdu.FunctionCode,
 		Payload:      pdu.Payload[0:4], // Echo back address and value
+	}
+	return res
+}
+
+// FC0x17 (23) combines write and read in one single request. The request
+// processing starts with writting the write values to the given write
+// address. It proceeds with reading the given number of bytes. These read values
+// are returned in the requests response.
+//
+// FC17 payload example: F1 FF 00 03 F1 FF 00 01 02 01 00
+//
+//	[readAddr(2)]       F1 FF
+//	[readQty(2)]        00 03
+//	[writeAddr(2)]      F1 FF
+//	[writeQty(2)]       00 01
+//	[byteCount(1)]         02
+//	[writeValues(N)]    01 00
+//
+// Response payload:  06 81 04 04 09 00 00 1F 69
+//
+//	[readByteCount(1)]          06
+//	[upgradeResponseCommand(1)] 81
+//	[upgradeResponseLength(1)]  04
+//	[upgradeResponseData(len)]  04 09 00 00
+func (s *Slave) processFC17(pdu PDU) *PDU {
+	readAddr := encoding.BytesToUint16(pdu.Payload[0:2])
+	readQty := encoding.BytesToUint16(pdu.Payload[2:4])
+	writeAddr := encoding.BytesToUint16(pdu.Payload[4:6])
+	writeQty := encoding.BytesToUint16(pdu.Payload[6:8])
+	byteCount := pdu.Payload[8]
+	writeValues := pdu.Payload[9 : 9+byteCount]
+
+	s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d ReadAddr=0x%X ReadQty=%d WriteAddr=0x%X WriteQty=%d ByteCount=%d, WriteValues=0x%X",
+		pdu.FunctionCode, pdu.UnitId, readAddr, readQty, writeAddr, writeQty, byteCount, writeValues)))
+
+	// First, write the values
+	for i := range writeQty {
+		addr := writeAddr + i
+		value := encoding.BytesToUint16(writeValues[i*2 : i*2+2])
+		s.registers[addr] = value
+		slog.Debug("FC17 Write Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%04X", value))
+
+		// Apply write rules
+		if targetRegister, targetValue, applied := s.ruleEngine.ApplyWriteRules(addr, value, s.registers); applied {
+			s.registers[targetRegister] = targetValue
+			s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("R1 FC=17 Rule applied UnitID=%d WriteAddress=0x%X NewValue=0x%X", pdu.UnitId, targetRegister, targetValue)))
+		}
+	}
+
+	// Build read response
+	// First byte: byte count (number of data bytes to follow = readQty * 2)
+	readByteCount := uint8(readQty * 2)
+
+	// Hardcoded response data
+	// 0 => response code for command $01
+	// 1 => 4 bytes of data
+	// 2..5 => fw version little endian = $00000904 = 0.0.9.4
+	responseData := []byte{0x81, 0x04, 0x04, 0x09, 0x00, 0x00}
+
+	// Construct the full response: [byte count] + [data]
+	responsePayload := append([]byte{readByteCount}, responseData...)
+	s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("RX FC=%d UnitID=%d ReadAddr=0x%X ReadQty=%d Payload=0x%X",
+		pdu.FunctionCode, pdu.UnitId, readAddr, readQty, responsePayload)))
+
+	res := &PDU{
+		UnitId:       pdu.UnitId,
+		FunctionCode: pdu.FunctionCode,
+		Payload:      responsePayload,
 	}
 	return res
 }

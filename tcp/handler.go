@@ -112,7 +112,7 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 	slog.Debug("MBAP header received", "pdu", pdu, "txid", txnId)
 
 	h.protocolPort.Separator()
-	m := message.Unencoded{Value: fmt.Sprintf("TX % X % X % X", header, pdu.FunctionCode, pdu.Payload)}
+	m := message.Unencoded{Value: fmt.Sprintf("TX % X %02X % X", header, pdu.FunctionCode, pdu.Payload)}
 	h.protocolPort.InfoX(m)
 
 	res := processPDU(*pdu)

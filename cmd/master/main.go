@@ -21,7 +21,8 @@ func main() {
 	slaveID := flag.Int("slave", 101, "the slave id")
 	url := flag.String("url", "localhost:502", "the url to connect")
 	quantity := flag.Int("quantity", 1, "number of registers to read (for FC4)")
-	fc := flag.Int("fc", int(modbuslabs.FC6WriteSingleRegister), "the modbus function code (2|4|5|6|16)")
+	fc := flag.Int("fc", int(modbuslabs.FC6WriteSingleRegister), "the modbus function code (2|4|5|6|16|17)")
+	writeAddr := flag.String("write-address", "0x000", "write address for FC17")
 	flag.Parse()
 
 	addrHex, err := encoding.NewHex(*addr)
@@ -144,6 +145,55 @@ func main() {
 		ts := time.Now().Format(time.DateTime)
 		fmt.Printf("%s % X\n", ts, bb)
 		fmt.Printf("Successfully wrote float32 to 2 registers starting at 0x%04X\n", addrHex.Uint16())
+
+	// Sample FC17 Request
+	//	go run cmd/master/main.go \
+	//	    -fc 23 \
+	//	    -address 0xF1FF \
+	//	    -write-address 0xF1FF \
+	//	    -quantity 2 \
+	//	    -value 0100 \                                                                                                                                                  -slave 1 \
+	//      -slave 101 \
+	//	    -url localhost:502
+	case int(modbuslabs.FC17ReadWriteMultipleRegisters):
+		// Parse write address
+		writeAddrHex, err := encoding.NewHex(*writeAddr)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Parse value as hex string (e.g., "00FF1234" -> []byte{0x00, 0xFF, 0x12, 0x34})
+		valueBytes, err := encoding.HexStringToBytes(*value)
+		if err != nil {
+			slog.Error("invalid hex value", "err", err, "value", *value)
+			log.Fatal(err)
+		}
+
+		// Calculate number of registers to write (2 bytes per register)
+		writeQuantity := len(valueBytes) / 2
+		if len(valueBytes)%2 != 0 {
+			slog.Error("hex value must have even number of characters (2 bytes per register)")
+			log.Fatal("invalid hex value length")
+		}
+
+		// Read from addrHex, write to writeAddrHex
+		bb, err := client.ReadWriteMultipleRegisters(addrHex.Uint16(), uint16(*quantity), writeAddrHex.Uint16(), uint16(writeQuantity), valueBytes)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		ts := time.Now().Format(time.DateTime)
+		fmt.Printf("%s % X\n", ts, bb)
+		fmt.Printf("Read %d registers from 0x%04X:\n", *quantity, addrHex.Uint16())
+
+		// Print register values (2 bytes per register)
+		for i := 0; i < *quantity; i++ {
+			regValue := uint16(bb[i*2])<<8 | uint16(bb[i*2+1])
+			fmt.Printf("  Register 0x%04X: %d (0x%04X)\n", addrHex.Uint16()+uint16(i), regValue, regValue)
+		}
+
+		fmt.Printf("Wrote %d registers to 0x%04X with value: %s\n", writeQuantity, writeAddrHex.Uint16(), *value)
+
 	default:
 		slog.Error("unknown function code", "fc", *fc)
 	}

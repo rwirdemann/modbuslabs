@@ -74,7 +74,7 @@ func (h *Gateway) processPDU(pdu PDU) *PDU {
 	}
 
 	switch pdu.FunctionCode {
-	case FC2ReadDiscreteRegisters, FC6WriteSingleRegister:
+	case FC2ReadDiscreteRegisters, FC6WriteSingleRegister, FC17ReadWriteMultipleRegisters:
 		return slave.Process(pdu)
 	}
 
