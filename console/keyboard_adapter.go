@@ -56,8 +56,11 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 				continue
 			}
 			url := parts[2]
-			a.simulator.ConnectSlave(uint8(unitID), url)
-			a.protocolPort.Println(fmt.Sprintf("Connected slave with unit ID %d to %s", unitID, url))
+			if err := a.simulator.ConnectSlave(uint8(unitID), url); err == nil {
+				a.protocolPort.Println(fmt.Sprintf("Connected slave with unit ID %d to %s", unitID, url))
+			} else {
+				a.protocolPort.Println(fmt.Sprintf("Error: %s", err))
+			}
 		case "disconnect", "d":
 			if len(parts) < 2 {
 				a.protocolPort.Println("Error: disconnect command requires a unit ID (e.g., 'connect 1')")
