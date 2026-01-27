@@ -190,12 +190,19 @@ func (h *Gateway) processPDU(pdu PDU) *PDU {
 }
 
 func (g *Gateway) ConnectSlave(unitID uint8, url string) error {
+	if _, exists := g.slaves[url]; !exists {
+		return fmt.Errorf("URl %s not configured", url)
+	}
+
 	if _, exists := g.slaves[url][unitID]; exists {
-		g.slaves[url][unitID] = NewSlave(unitID, true, rules.NewEngine(nil), g.protocolPort)
-		slog.Debug("slave connected", "unitID", unitID, "url", url)
+		g.slaves[url][unitID].connected = true
+		slog.Debug("slave reconnected", "unitID", unitID, "url", url)
 		return nil
 	}
-	return fmt.Errorf("error connecting slave %d to url %s", unitID, url)
+
+	g.slaves[url][unitID] = NewSlave(unitID, true, rules.NewEngine(nil), g.protocolPort)
+	slog.Debug("slave connected", "unitID", unitID, "url", url)
+	return nil
 }
 
 // ConnectSlaveWithConfig connects a slave with configuration including rules
