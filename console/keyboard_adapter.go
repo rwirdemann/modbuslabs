@@ -97,6 +97,7 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.simulator.DisconnectSlave(uint8(unitID))
 			a.protocolPort.Println(fmt.Sprintf("Disconnected slave with unit ID %d", unitID))
 		case "help", "h":
+			a.protocolPort.Separator()
 			a.protocolPort.Println("Commands:")
 			a.protocolPort.Println("  quit/exit/q              - Quit simulator")
 			a.protocolPort.Println("  status/s                 - Show simulator status")
@@ -106,8 +107,11 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.protocolPort.Println("  disconnect/d <unitID>    - Disconnect slave")
 			a.protocolPort.Println("  toggle/t                 - Toggle output format")
 			a.protocolPort.Println("  help/h                   - Show help")
+			a.protocolPort.Separator()
 		default:
+			a.protocolPort.Separator()
 			a.protocolPort.Println(fmt.Sprintf("Unknown command: %s (use 'h' for help)", input))
+			a.protocolPort.Separator()
 		}
 	}
 }

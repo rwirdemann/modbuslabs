@@ -210,7 +210,7 @@ func (h *Gateway) ConnectSlaveWithConfig(slaveConfig config.Slave, url string) {
 	if _, exists := h.slaves[url][slaveConfig.ID]; !exists {
 		ruleEngine := rules.NewEngine(slaveConfig.Rules)
 		h.slaves[url][slaveConfig.ID] = NewSlave(slaveConfig.ID, true, ruleEngine, h.protocolPort)
-		slog.Info("Slave connected with rules", "unitID", slaveConfig.ID, "url", url, "ruleCount", len(slaveConfig.Rules))
+		slog.Debug("Slave connected with rules", "unitID", slaveConfig.ID, "url", url, "ruleCount", len(slaveConfig.Rules))
 	}
 }
 

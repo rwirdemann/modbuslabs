@@ -79,7 +79,7 @@ func main() {
 		_, _ = fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
 	}
-	slog.Info("Configuration loaded", "transports", len(cfg.Transports), "slaves", len(cfg.Slaves))
+	slog.Debug("Configuration loaded", "transports", len(cfg.Transports), "slaves", len(cfg.Slaves))
 
 	// Create transport handlers from config
 	var handler []modbuslabs.TransportHandler
@@ -118,7 +118,7 @@ func main() {
 	// Connect all configured slaves
 	for _, s := range cfg.Slaves {
 		modbus.ConnectSlaveWithConfig(s, s.Address)
-		slog.Info("Connected slave", "id", s.ID, "address", s.Address)
+		slog.Debug("Connected slave", "id", s.ID, "address", s.Address)
 	}
 
 	<-ctx.Done()
