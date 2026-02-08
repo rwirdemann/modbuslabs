@@ -10,6 +10,7 @@ type ProtocolPort interface {
 	Println(msg string)
 
 	Separator()
+	ForceSeparator()
 	Mute()
 	Unmute()
 	Toggle()

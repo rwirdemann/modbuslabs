@@ -12,10 +12,10 @@ import (
 )
 
 type ProtocolAdapter struct {
-	lastLine string
-	muted    bool
-	loglevel message.Type
-	writer   io.Writer
+	muted            bool
+	loglevel         message.Type
+	writer           io.Writer
+	lastWasSeparator bool
 }
 
 func NewProtocolAdapter() *ProtocolAdapter {
@@ -31,6 +31,7 @@ func (p *ProtocolAdapter) SetWriter(w io.Writer) {
 
 func (p *ProtocolAdapter) InfoX(m message.Message) {
 	if m.Type() == p.loglevel {
+		p.lastWasSeparator = false
 		ts := time.Now().Format(time.DateTime)
 		p.print(fmt.Sprintf("%s %s", ts, m.String()), false)
 	}
@@ -48,19 +49,30 @@ func (p *ProtocolAdapter) Toggle() {
 }
 
 func (p *ProtocolAdapter) Info(msg string) {
+	p.lastWasSeparator = false
 	ts := time.Now().Format(time.DateTime)
 	p.print(fmt.Sprintf("%s %s", ts, msg), false)
 }
 
 func (p *ProtocolAdapter) Separator() {
+	if p.lastWasSeparator {
+		return
+	}
 	width := 80
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
 		width = w
 	}
 	p.print(strings.Repeat("─", width), false)
+	p.lastWasSeparator = true
+}
+
+func (p *ProtocolAdapter) ForceSeparator() {
+	p.lastWasSeparator = false
+	p.Separator()
 }
 
 func (p *ProtocolAdapter) Println(msg string) {
+	p.lastWasSeparator = false
 	p.print(msg, true)
 }
 
@@ -77,9 +89,5 @@ func (p *ProtocolAdapter) print(s string, force bool) {
 		return
 	}
 
-	if p.lastLine == s {
-		return
-	}
 	fmt.Fprintln(p.writer, s)
-	p.lastLine = s
 }
