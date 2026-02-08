@@ -1,13 +1,13 @@
 package console
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	"os"
+	"io"
 	"strconv"
 	"strings"
 
+	"github.com/chzyer/readline"
 	"github.com/rwirdemann/modbuslabs"
 )
 
@@ -21,10 +21,26 @@ func NewKeyboardAdapter(slaveSimulator modbuslabs.ControlPort, protocolPort modb
 }
 
 func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
-	scanner := bufio.NewScanner(os.Stdin)
-	a.protocolPort.Println("Enter 'h' followed by <enter> for help...")
-	for scanner.Scan() {
-		input := scanner.Text()
+	rl, err := readline.New("> ")
+	if err != nil {
+		panic(err)
+	}
+	defer rl.Close()
+
+	a.protocolPort.Println("Enter 'h' for help (use arrow keys for command history)...")
+
+	for {
+		line, err := rl.Readline()
+		if err != nil {
+			if err == io.EOF {
+				a.protocolPort.Println("\nTerminating simulator...")
+				cancel()
+				return
+			}
+			break
+		}
+
+		input := strings.TrimSpace(line)
 		parts := strings.Fields(input)
 		if len(parts) == 0 {
 			continue
@@ -84,7 +100,7 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.protocolPort.Println("  toggle/t                 - Toggle output format")
 			a.protocolPort.Println("  help/h                   - Show help")
 		default:
-			fmt.Printf("Unknown command: %s (use 'h' for help)\n", input)
+			a.protocolPort.Println(fmt.Sprintf("Unknown command: %s (use 'h' for help)", input))
 		}
 	}
 }
