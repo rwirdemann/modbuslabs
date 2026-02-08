@@ -73,10 +73,10 @@ func (e *Engine) Status() string {
 	if len(e.rules) == 0 {
 		return ""
 	}
-	s := "\n      Rules:"
+	s := "\n    Rules:"
 	for register, rules := range e.rules {
 		for i, r := range rules {
-			s = fmt.Sprintf("%s\n      - R%d: 0x%04X => %s %s", s, i+1, register, r.Trigger, r.Action)
+			s = fmt.Sprintf("%s\n    - R%d: 0x%04X => %s %s", s, i+1, register, r.Trigger, r.Action)
 		}
 	}
 	return s

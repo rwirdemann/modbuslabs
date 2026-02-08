@@ -225,7 +225,7 @@ func (h *Gateway) DisconnectSlave(unitID uint8) {
 func (h *Gateway) Status() string {
 	var status string
 	for i, p := range h.handler {
-		status += fmt.Sprintf("Port %d: %s", i, p.Description())
+		status = fmt.Sprintf("%sPort %d: %s", status, i, p.Description())
 		if len(h.slaves[p.Description()]) == 0 {
 			status += "\n  <no slaves connected>"
 		}
@@ -234,7 +234,7 @@ func (h *Gateway) Status() string {
 			if slave.connected {
 				connectStatus = "connected"
 			}
-			status += fmt.Sprintf("\n    - Unit %d: %s", unitID, connectStatus)
+			status = fmt.Sprintf("%s\n  - Unit %d: %s", status, unitID, connectStatus)
 			status += slave.ruleEngine.Status()
 			if len(slave.registers) > 0 {
 				for addr, value := range slave.registers {
@@ -245,8 +245,4 @@ func (h *Gateway) Status() string {
 		}
 	}
 	return status
-}
-
-func (b *Gateway) info(m message.Message) {
-	b.protocolPort.InfoX(m)
 }

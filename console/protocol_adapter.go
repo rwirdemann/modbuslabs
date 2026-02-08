@@ -2,6 +2,7 @@ package console
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -14,10 +15,18 @@ type ProtocolAdapter struct {
 	lastLine string
 	muted    bool
 	loglevel message.Type
+	writer   io.Writer
 }
 
 func NewProtocolAdapter() *ProtocolAdapter {
-	return &ProtocolAdapter{loglevel: message.TypeUnencoded}
+	return &ProtocolAdapter{
+		loglevel: message.TypeUnencoded,
+		writer:   os.Stdout, // Default to stdout
+	}
+}
+
+func (p *ProtocolAdapter) SetWriter(w io.Writer) {
+	p.writer = w
 }
 
 func (p *ProtocolAdapter) InfoX(m message.Message) {
@@ -71,6 +80,6 @@ func (p *ProtocolAdapter) print(s string, force bool) {
 	if p.lastLine == s {
 		return
 	}
-	fmt.Println(s)
+	fmt.Fprintln(p.writer, s)
 	p.lastLine = s
 }

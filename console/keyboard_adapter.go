@@ -27,6 +27,11 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 	}
 	defer rl.Close()
 
+	// Set readline's stdout as the writer for protocol output
+	if adapter, ok := a.protocolPort.(*ProtocolAdapter); ok {
+		adapter.SetWriter(rl.Stdout())
+	}
+
 	a.protocolPort.Println("Enter 'h' for help (use arrow keys for command history)...")
 
 	for {
@@ -53,7 +58,9 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			cancel()
 			return
 		case "status", "s":
+			a.protocolPort.Separator()
 			a.protocolPort.Println(a.simulator.Status())
+			a.protocolPort.Separator()
 		case "mute", "m":
 			a.protocolPort.Mute()
 			a.protocolPort.Println("Protocol output muted. Type 'u' to unmute.")
@@ -103,10 +110,4 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.protocolPort.Println(fmt.Sprintf("Unknown command: %s (use 'h' for help)", input))
 		}
 	}
-}
-
-type simulatorPort interface {
-	Status() string
-	ConnectSlave(unitID uint8, url string)
-	DisconnectSlave(unitID uint8)
 }
