@@ -151,7 +151,7 @@ func main() {
 	//	    -fc 23 \
 	//	    -address 0xF1FF \
 	//	    -write-address 0xF1FF \
-	//	    -quantity 2 \
+	//	    -quantity 3 \
 	//	    -value 0100 \                                                                                                                                                  -slave 1 \
 	//      -slave 101 \
 	//	    -url localhost:502
@@ -176,6 +176,7 @@ func main() {
 			log.Fatal("invalid hex value length")
 		}
 
+		fmt.Printf("read quantity: %d\n", uint16(*quantity))
 		// Read from addrHex, write to writeAddrHex
 		bb, err := client.ReadWriteMultipleRegisters(addrHex.Uint16(), uint16(*quantity), writeAddrHex.Uint16(), uint16(writeQuantity), valueBytes)
 		if err != nil {

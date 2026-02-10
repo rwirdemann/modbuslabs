@@ -114,8 +114,8 @@ func (s *Slave) processFC6(pdu PDU) *PDU {
 
 // FC0x17 (23) combines write and read in one single request. The request
 // processing starts with writting the write values to the given write
-// address. It proceeds with reading the given number of bytes. These read values
-// are returned in the requests response.
+// address. It proceeds with reading the given number of bytes. These read
+// values are returned in the requests response.
 //
 // FC17 payload example: F1 FF 00 03 F1 FF 00 01 02 01 00
 //
