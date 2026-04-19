@@ -19,43 +19,27 @@ import (
 	"github.com/rwirdemann/modbuslabs/tcp"
 )
 
-// getHomeDir returns the home directory, handling sudo correctly. When running
-// with sudo, it tries to get the original user's home directory.
-func getHomeDir() string {
-	// First check if SUDO_USER is set (program running with sudo)
-	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
-		// Construct home directory from SUDO_USER, platform-aware
-		var homeBase string
-		if runtime.GOOS == "darwin" {
-			homeBase = "/Users"
-		} else {
-			homeBase = "/home"
-		}
-		return filepath.Join(homeBase, sudoUser)
-	}
-
-	// Try to get home directory from os package
-	if homeDir, err := os.UserHomeDir(); err == nil {
-		return homeDir
-	}
-
-	// Last resort fallback
-	return "."
+func main() {
+	os.Exit(run())
 }
 
-func main() {
+func run() int {
 	homeDir := getHomeDir()
-	defaultConfig := filepath.Join(homeDir, ".config", "slavesim", "slavesim.toml")
+	defaultConfig := filepath.Join(
+		homeDir, ".config", "slavesim", "slavesim.toml",
+	)
 
 	debug := flag.Bool("debug", false, "set log level to debug")
 	out := flag.String("out", "console", "the output channel (console)")
-	configFile := flag.String("config", defaultConfig, "path to TOML configuration file")
+	configFile := flag.String(
+		"config", defaultConfig, "path to TOML configuration file",
+	)
 	help := flag.Bool("help", false, "Print this help page.")
 	flag.Parse()
 
 	if *help {
 		flag.Usage()
-		os.Exit(0)
+		return 0
 	}
 
 	if *debug {
@@ -64,7 +48,7 @@ func main() {
 
 	if *configFile == "" {
 		flag.Usage()
-		os.Exit(1)
+		return 1
 	}
 
 	var protocolPort modbuslabs.ProtocolPort
@@ -72,77 +56,92 @@ func main() {
 		protocolPort = console.NewProtocolAdapter()
 	} else {
 		flag.Usage()
-		os.Exit(1)
+		return 1
 	}
 
 	cfg, err := config.Load(*configFile)
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
-	slog.Debug("Configuration loaded", "transports", len(cfg.Transports), "slaves", len(cfg.Slaves))
+	slog.Debug(
+		"Configuration loaded",
+		"transports", len(cfg.Transports),
+		"slaves", len(cfg.Slaves),
+	)
 
-	// Start socat for each RTU transport to create virtual port pairs.
-	var socatProcs []*os.Process
-	for _, t := range cfg.Transports {
-		if t.Type != "rtu" {
-			continue
-		}
-		proc, err := socat.Start(t.Address, t.PeerAddress)
-		if err != nil {
-			for _, p := range socatProcs {
-				_ = p.Kill()
-			}
-			_, _ = fmt.Fprintf(os.Stderr, "socat: %v\n", err)
-			os.Exit(1)
-		}
-		socatProcs = append(socatProcs, proc)
+	stopSocat, err := socat.StartAll(cfg.Transports)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "socat: %v\n", err)
+		return 1
 	}
-	defer func() {
-		for _, p := range socatProcs {
-			_ = p.Kill()
-		}
-	}()
+	defer stopSocat()
 
-	// Create transport handlers from config
-	var handler []modbuslabs.TransportHandler
-	for _, t := range cfg.Transports {
-		var h modbuslabs.TransportHandler
-		var err error
-
-		switch t.Type {
-		case "tcp":
-			h, err = tcp.NewHandler(fmt.Sprintf("tcp://%s", t.Address), protocolPort)
-			if err != nil {
-				_, _ = fmt.Fprintf(os.Stderr, "Error creating TCP handler for %s: %v\n", t.Address, err)
-				os.Exit(1)
-			}
-		case "rtu":
-			h = rtu.NewHandler(t.Address, protocolPort)
-		default:
-			_, _ = fmt.Fprintf(os.Stderr, "Unknown transport type: %s\n", t.Type)
-			os.Exit(1)
-		}
-		handler = append(handler, h)
+	handlers, err := buildHandlers(cfg, protocolPort)
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
 	}
 
-	modbus := modbuslabs.NewGateway(handler, protocolPort)
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, cancel := signal.NotifyContext(
+		context.Background(), syscall.SIGINT, syscall.SIGTERM,
+	)
 	defer cancel()
 
+	modbus := modbuslabs.NewGateway(handlers, protocolPort)
 	if err := modbus.Start(ctx); err != nil {
 		panic(err)
 	}
 	defer modbus.Stop()
 
-	driver := console.NewKeyboardAdapter(modbus, protocolPort)
-	go driver.Start(cancel)
+	go console.NewKeyboardAdapter(modbus, protocolPort).Start(cancel)
 
-	// Connect all configured slaves
 	for _, s := range cfg.Slaves {
 		modbus.ConnectSlaveWithConfig(s, s.Address)
 		slog.Debug("Connected slave", "id", s.ID, "address", s.Address)
 	}
 
 	<-ctx.Done()
+	return 0
+}
+
+// buildHandlers creates a TransportHandler for each configured transport.
+func buildHandlers(
+	cfg *config.Config,
+	port modbuslabs.ProtocolPort,
+) ([]modbuslabs.TransportHandler, error) {
+	var handlers []modbuslabs.TransportHandler
+	for _, t := range cfg.Transports {
+		switch t.Type {
+		case "tcp":
+			h, err := tcp.NewHandler(
+				fmt.Sprintf("tcp://%s", t.Address), port,
+			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"TCP handler %s: %w", t.Address, err,
+				)
+			}
+			handlers = append(handlers, h)
+		case "rtu":
+			handlers = append(handlers, rtu.NewHandler(t.Address, port))
+		}
+	}
+	return handlers, nil
+}
+
+// getHomeDir returns the home directory, handling sudo correctly. When
+// running with sudo, it uses the original user's home directory.
+func getHomeDir() string {
+	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+		base := "/home"
+		if runtime.GOOS == "darwin" {
+			base = "/Users"
+		}
+		return filepath.Join(base, sudoUser)
+	}
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		return homeDir
+	}
+	return "."
 }
