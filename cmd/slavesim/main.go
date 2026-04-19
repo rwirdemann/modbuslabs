@@ -15,6 +15,7 @@ import (
 	"github.com/rwirdemann/modbuslabs/config"
 	"github.com/rwirdemann/modbuslabs/console"
 	"github.com/rwirdemann/modbuslabs/rtu"
+	"github.com/rwirdemann/modbuslabs/socat"
 	"github.com/rwirdemann/modbuslabs/tcp"
 )
 
@@ -80,6 +81,28 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Debug("Configuration loaded", "transports", len(cfg.Transports), "slaves", len(cfg.Slaves))
+
+	// Start socat for each RTU transport to create virtual port pairs.
+	var socatProcs []*os.Process
+	for _, t := range cfg.Transports {
+		if t.Type != "rtu" {
+			continue
+		}
+		proc, err := socat.Start(t.Address, t.PeerAddress)
+		if err != nil {
+			for _, p := range socatProcs {
+				_ = p.Kill()
+			}
+			_, _ = fmt.Fprintf(os.Stderr, "socat: %v\n", err)
+			os.Exit(1)
+		}
+		socatProcs = append(socatProcs, proc)
+	}
+	defer func() {
+		for _, p := range socatProcs {
+			_ = p.Kill()
+		}
+	}()
 
 	// Create transport handlers from config
 	var handler []modbuslabs.TransportHandler

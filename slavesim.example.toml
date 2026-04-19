@@ -13,9 +13,13 @@ type = "tcp"
 address = "localhost:503"
 
 # Example RTU transport (uncomment to use):
+# slavesim starts socat automatically to create a virtual port pair.
+# address     = slave-side TTY (used by slavesim)
+# peer_address = client-side TTY (used by master or other tools)
 # [[transport]]
 # type = "rtu"
-# address = "/tmp/virtualcom0"
+# address = "/tmp/ttyV0"
+# peer_address = "/tmp/ttyV1"
 
 # Slave definitions
 # Each slave has an ID and is connected to a specific transport address

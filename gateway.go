@@ -222,6 +222,26 @@ func (h *Gateway) DisconnectSlave(unitID uint8) {
 	}
 }
 
+// WriteRegister writes one or more uint16 values to consecutive registers
+// on the slave identified by unitID, starting at addr.
+func (g *Gateway) WriteRegister(
+	unitID uint8,
+	addr uint16,
+	values []uint16,
+) error {
+	g.slaveLock.Lock()
+	defer g.slaveLock.Unlock()
+
+	slave, exists := g.findSlave(unitID)
+	if !exists || !slave.connected {
+		return fmt.Errorf("slave %d not found", unitID)
+	}
+	for i, v := range values {
+		slave.registers[addr+uint16(i)] = v
+	}
+	return nil
+}
+
 func (h *Gateway) Status() string {
 	var status string
 	for i, p := range h.handler {

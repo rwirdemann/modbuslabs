@@ -18,27 +18,42 @@ Slavesim searches for its configurtion file slavesim.toml in $HOME/.config/slave
 
 ### Usage
 
+## Modbus RTU
 
-#### Run slavesim (aka LDSMock, virtualONS)
+When a transport is configured with `type = "rtu"`, slavesim automatically
+launches a `socat` process to create a virtual serial port pair. The two
+TTY paths in the config have distinct roles:
+
+- `address` — the slave-side TTY that slavesim's RTU handler listens on
+- `peer_address` — the client-side TTY that the master or any other tool
+  connects to
+
+```toml
+[[transport]]
+type        = "rtu"
+address     = "/tmp/ttyV0"
+peer_address = "/tmp/ttyV1"
 ```
-sudo run cmd/slavesim/main.go
-```
+
+slavesim owns the lifecycle of the socat process: it is started before the
+gateway comes up and killed when slavesim exits. No manual socat setup is
+required.
 
 #### Read or write data
 
 ```bash
 # Write coil
-go run cmd/master/main.go --value=true --address=0x7E33 --fc=5
+go run cmd/master/main.go --value=true --address=0x7E33 --fc=5 --transport=tcp
 ```
 
 ```bash
 # Write float32
-go run cmd/master/main.go --value=12.33 --address=0x9000 --fc=16
+go run cmd/master/main.go --value=12.33 --address=0x9000 --fc=16 --transport=tcp
 ```
 
 ```bash
 # Read float32
-go run cmd/master/main.go --address 0x9000 --fc=4 --quantity=2
+go run cmd/master/main.go --address 0x9000 --fc=4 --quantity=2 --transport=tcp
 ```
 
 ## Note about port forwarding
@@ -47,6 +62,3 @@ Slavesim runs on tcp:502 and 503 (see default config). If you want to run the si
 ```
 echo "rdr pass on lo0 inet proto tcp from any to any port 502 -> 127.0.0.1 port 5502" | sudo pfctl -ef -
 ```
-
-
-

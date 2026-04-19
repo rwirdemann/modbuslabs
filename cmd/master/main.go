@@ -43,7 +43,7 @@ func main() {
 		handler = h
 	}
 	if *transport == "rtu" {
-		h := bmodbus.NewRTUClientHandler("/tmp/virtualcom1")
+		h := bmodbus.NewRTUClientHandler("/tmp/ttyV1")
 		h.Timeout = 5 * time.Second
 		h.SlaveId = 101
 		h.BaudRate = 9600

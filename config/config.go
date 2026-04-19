@@ -15,8 +15,9 @@ type Config struct {
 
 // Transport defines a transport handler (TCP or RTU)
 type Transport struct {
-	Type    string `toml:"type"`    // "tcp" or "rtu"
-	Address string `toml:"address"` // For TCP: "localhost:502", for RTU: "/tmp/virtualcom0"
+	Type        string `toml:"type"`         // "tcp" or "rtu"
+	Address     string `toml:"address"`      // For TCP: "localhost:502", for RTU: "/tmp/virtualcom0"
+	PeerAddress string `toml:"peer_address"` // RTU only: client-side TTY, e.g. "/tmp/ttyV1"
 }
 
 // Slave defines a slave configuration
@@ -69,6 +70,12 @@ func (c *Config) Validate() error {
 		}
 		if t.Address == "" {
 			return fmt.Errorf("transport[%d]: address is required", i)
+		}
+		if t.Type == "rtu" && t.PeerAddress == "" {
+			return fmt.Errorf(
+				"transport[%d]: peer_address required for rtu transport",
+				i,
+			)
 		}
 		transportAddresses[t.Address] = true
 	}

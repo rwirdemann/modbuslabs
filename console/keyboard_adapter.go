@@ -9,6 +9,7 @@ import (
 
 	"github.com/chzyer/readline"
 	"github.com/rwirdemann/modbuslabs"
+	"github.com/rwirdemann/modbuslabs/encoding"
 )
 
 type KeyboardAdapter struct {
@@ -105,20 +106,90 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.simulator.DisconnectSlave(uint8(unitID))
 			a.protocolPort.Println(fmt.Sprintf("Disconnected slave with unit ID %d", unitID))
 			a.protocolPort.Separator()
+		case "write", "w":
+			if len(parts) < 4 {
+				a.protocolPort.Println(
+					"Error: usage: w <unitID> <addr> <value>",
+				)
+				a.protocolPort.Separator()
+				continue
+			}
+			unitID, err := strconv.ParseUint(parts[1], 10, 8)
+			if err != nil {
+				a.protocolPort.Println(fmt.Sprintf(
+					"Error: invalid unit ID '%s'", parts[1],
+				))
+				a.protocolPort.Separator()
+				continue
+			}
+			h, err := encoding.NewHex(parts[2])
+			if err != nil {
+				a.protocolPort.Println(fmt.Sprintf(
+					"Error: invalid address: %s", parts[2],
+				))
+				a.protocolPort.Separator()
+				continue
+			}
+			values, err := parseWriteValue(parts[3])
+			if err != nil {
+				a.protocolPort.Println(fmt.Sprintf(
+					"Error: invalid value: %s", parts[3],
+				))
+				a.protocolPort.Separator()
+				continue
+			}
+			if err := a.simulator.WriteRegister(
+				uint8(unitID), h.Uint16(), values,
+			); err != nil {
+				a.protocolPort.Println(fmt.Sprintf("Error: %s", err))
+				a.protocolPort.Separator()
+				continue
+			}
+			a.protocolPort.Println(fmt.Sprintf(
+				"Register 0x%04X on slave %d set to %s",
+				h.Uint16(), unitID, parts[3],
+			))
+			a.protocolPort.Separator()
 		case "help", "h":
 			a.protocolPort.Println("Commands:")
-			a.protocolPort.Println("  quit/exit/q              - Quit simulator")
-			a.protocolPort.Println("  status/s                 - Show simulator status")
-			a.protocolPort.Println("  mute/m                   - Mute protocol output")
-			a.protocolPort.Println("  unmute/u                 - Unmute protocol output")
-			a.protocolPort.Println("  connect/c <unitID> <url> - Connect slave")
-			a.protocolPort.Println("  disconnect/d <unitID>    - Disconnect slave")
-			a.protocolPort.Println("  toggle/t                 - Toggle output format")
-			a.protocolPort.Println("  help/h                   - Show help")
+			a.protocolPort.Println("  quit/exit/q                       - Quit simulator")
+			a.protocolPort.Println("  status/s                          - Show simulator status")
+			a.protocolPort.Println("  mute/m                            - Mute protocol output")
+			a.protocolPort.Println("  unmute/u                          - Unmute protocol output")
+			a.protocolPort.Println("  connect/c <unitID> <url>          - Connect slave")
+			a.protocolPort.Println("  disconnect/d <unitID>             - Disconnect slave")
+			a.protocolPort.Println("  write/w <unitID> <addr> <value>   - Write register value")
+			a.protocolPort.Println("  toggle/t                          - Toggle output format")
+			a.protocolPort.Println("  help/h                            - Show help")
 			a.protocolPort.Separator()
 		default:
 			a.protocolPort.Println(fmt.Sprintf("Unknown command: %s (use 'h' for help)", input))
 			a.protocolPort.Separator()
 		}
 	}
+}
+
+// parseWriteValue infers the type of v and returns the corresponding
+// uint16 register values. bool maps to 0/1, decimal numbers to two
+// float32 registers (high, low), integers to a single uint16.
+func parseWriteValue(v string) ([]uint16, error) {
+	if v == "true" {
+		return []uint16{1}, nil
+	}
+	if v == "false" {
+		return []uint16{0}, nil
+	}
+	if strings.Contains(v, ".") {
+		f, err := strconv.ParseFloat(v, 32)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value: %s", v)
+		}
+		high, low := encoding.Float32ToRegisters(float32(f))
+		return []uint16{high, low}, nil
+	}
+	n, err := strconv.ParseUint(v, 10, 16)
+	if err != nil {
+		return nil, fmt.Errorf("invalid value: %s", v)
+	}
+	return []uint16{uint16(n)}, nil
 }
