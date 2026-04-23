@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	bmodbus "github.com/goburrow/modbus"
@@ -123,28 +124,42 @@ func main() {
 		fmt.Printf("%s % X\n", ts, bb)
 		fmt.Printf("Register 0x%04X set to %d\n", addrHex.Uint16(), i)
 	case int(modbuslabs.FC16WriteMultipleRegisters):
-		f, err := strconv.ParseFloat(*value, 32)
-		if err != nil {
-			slog.Error("invalid float value", "err", err)
+		if strings.Contains(*value, ".") {
+			f, err := strconv.ParseFloat(*value, 32)
+			if err != nil {
+				slog.Error("invalid float value", "err", err)
+			}
+
+			// Convert float32 to two registers
+			high, low := encoding.Float32ToRegisters(float32(f))
+			fmt.Printf("Writing float32 value %.6f as registers: 0x%04X, 0x%04X\n", f, high, low)
+
+			// Convert register values to bytes (2 registers = 4 bytes)
+			valueBytes := make([]byte, 4)
+			binary.BigEndian.PutUint16(valueBytes[0:2], high)
+			binary.BigEndian.PutUint16(valueBytes[2:4], low)
+
+			// Write 2 registers starting at address
+			bb, err := client.WriteMultipleRegisters(addrHex.Uint16(), 2, valueBytes)
+			if err != nil {
+				log.Fatal(err)
+			}
+			ts := time.Now().Format(time.DateTime)
+			fmt.Printf("%s % X\n", ts, bb)
+			fmt.Printf("Successfully wrote float32 to 2 registers starting at 0x%04X\n", addrHex.Uint16())
+		} else {
+			n, _ := strconv.ParseUint(*value, 10, 16)
+			fmt.Printf("Writing uint16 %d to register: 0x%04X\n", n, addrHex.Uint16())
+			valueBytes := make([]byte, 2)
+			binary.BigEndian.PutUint16(valueBytes[0:2], uint16(n))
+			bb, err := client.WriteMultipleRegisters(addrHex.Uint16(), 1, valueBytes)
+			if err != nil {
+				log.Fatal(err)
+			}
+			ts := time.Now().Format(time.DateTime)
+			fmt.Printf("%s % X\n", ts, bb)
+			fmt.Printf("Successfully wrote uint16 to register 0x%04X\n", addrHex.Uint16())
 		}
-
-		// Convert float32 to two registers
-		high, low := encoding.Float32ToRegisters(float32(f))
-		fmt.Printf("Writing float32 value %.6f as registers: 0x%04X, 0x%04X\n", f, high, low)
-
-		// Convert register values to bytes (2 registers = 4 bytes)
-		valueBytes := make([]byte, 4)
-		binary.BigEndian.PutUint16(valueBytes[0:2], high)
-		binary.BigEndian.PutUint16(valueBytes[2:4], low)
-
-		// Write 2 registers starting at address
-		bb, err := client.WriteMultipleRegisters(addrHex.Uint16(), 2, valueBytes)
-		if err != nil {
-			log.Fatal(err)
-		}
-		ts := time.Now().Format(time.DateTime)
-		fmt.Printf("%s % X\n", ts, bb)
-		fmt.Printf("Successfully wrote float32 to 2 registers starting at 0x%04X\n", addrHex.Uint16())
 
 	// Sample FC17 Request
 	//	go run cmd/master/main.go \
