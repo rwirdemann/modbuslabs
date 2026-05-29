@@ -8,4 +8,7 @@ type ControlPort interface {
 	// WriteRegister writes one or more uint16 values to consecutive
 	// registers on the slave identified by unitID, starting at addr.
 	WriteRegister(unitID uint8, addr uint16, values []uint16) error
+
+	// Reset sets all registers of the slave identified by unitID to zero.
+	Reset(unitID uint8) error
 }

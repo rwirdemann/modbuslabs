@@ -150,6 +150,31 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 				h.Uint16(), unitID, parts[3],
 			))
 			a.protocolPort.Separator()
+		case "reset", "r":
+			if len(parts) < 2 {
+				a.protocolPort.Println(
+					"Error: usage: reset <unitID>",
+				)
+				a.protocolPort.Separator()
+				continue
+			}
+			unitID, err := strconv.ParseUint(parts[1], 10, 8)
+			if err != nil {
+				a.protocolPort.Println(fmt.Sprintf(
+					"Error: invalid unit ID '%s'", parts[1],
+				))
+				a.protocolPort.Separator()
+				continue
+			}
+			if err := a.simulator.Reset(uint8(unitID)); err != nil {
+				a.protocolPort.Println(fmt.Sprintf("Error: %s", err))
+				a.protocolPort.Separator()
+				continue
+			}
+			a.protocolPort.Println(fmt.Sprintf(
+				"All registers on slave %d set to 0", unitID,
+			))
+			a.protocolPort.Separator()
 		case "help", "h":
 			a.protocolPort.Println("Commands:")
 			a.protocolPort.Println("  quit/exit/q                       - Quit simulator")
@@ -159,6 +184,7 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.protocolPort.Println("  connect/c <unitID> <url>          - Connect slave")
 			a.protocolPort.Println("  disconnect/d <unitID>             - Disconnect slave")
 			a.protocolPort.Println("  write/w <unitID> <addr> <value>   - Write register value")
+			a.protocolPort.Println("  reset/r <unitID>                  - Reset all registers to 0")
 			a.protocolPort.Println("  toggle/t                          - Toggle output format")
 			a.protocolPort.Println("  help/h                            - Show help")
 			a.protocolPort.Separator()

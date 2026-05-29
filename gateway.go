@@ -242,6 +242,21 @@ func (g *Gateway) WriteRegister(
 	return nil
 }
 
+// Reset sets all registers of the slave identified by unitID to zero.
+func (g *Gateway) Reset(unitID uint8) error {
+	g.slaveLock.Lock()
+	defer g.slaveLock.Unlock()
+
+	slave, exists := g.findSlave(unitID)
+	if !exists || !slave.connected {
+		return fmt.Errorf("slave %d not found", unitID)
+	}
+	for addr := range slave.registers {
+		slave.registers[addr] = 0
+	}
+	return nil
+}
+
 func (h *Gateway) Status() string {
 	var status string
 	for i, p := range h.handler {
