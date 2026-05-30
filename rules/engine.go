@@ -43,8 +43,14 @@ func (e *Engine) ApplyReadRules(register uint16, currentValue uint16) (uint16, b
 		if !e.shouldTrigger(rule.Trigger, TriggerOnRead) {
 			continue
 		}
-		slog.Debug("Rule executed", "register", fmt.Sprintf("0x%04X", register), "trigger", rule.Trigger, "action", rule.Action, "oldValue", fmt.Sprintf("0x%04X", currentValue), "newValue", fmt.Sprintf("0x%04X", *rule.Value))
-		return *rule.Value, true
+		slog.Debug("Rule executed",
+			"register", fmt.Sprintf("0x%04X", register),
+			"trigger", rule.Trigger,
+			"action", rule.Action,
+			"oldValue", fmt.Sprintf("0x%04X", currentValue),
+			"newValue", fmt.Sprintf("0x%04X", rule.Value.V),
+		)
+		return rule.Value.V, true
 	}
 
 	return 0, false
@@ -61,7 +67,8 @@ func (e *Engine) ApplyWriteRules(register uint16, currentValue uint16, registers
 			continue
 		}
 
-		if rule.Value != nil && *rule.Value == currentValue {
+		if rule.Value != nil && !rule.Value.Any &&
+			rule.Value.V == currentValue {
 			return *rule.WriteRegister, *rule.WriteValue, true
 		}
 	}

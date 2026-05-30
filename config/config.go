@@ -27,14 +27,41 @@ type Slave struct {
 	Rules   []Rule `toml:"rule"`    // Behavioral rules for this slave
 }
 
-// Rule defines a behavior rule for a slave
+// RuleValue holds a uint16 register value or the wildcard "any".
+type RuleValue struct {
+	V   uint16
+	Any bool
+}
+
+// UnmarshalTOML implements toml.Unmarshaler. It accepts an integer or
+// the string "any".
+func (rv *RuleValue) UnmarshalTOML(data any) error {
+	switch v := data.(type) {
+	case string:
+		if v == "any" {
+			rv.Any = true
+			return nil
+		}
+		return fmt.Errorf(
+			"invalid value %q, expected a number or \"any\"", v,
+		)
+	case int64:
+		rv.V = uint16(v)
+		return nil
+	default:
+		return fmt.Errorf("unexpected type %T for rule value", data)
+	}
+}
+
+// Rule defines a behavior rule for a slave.
 type Rule struct {
-	Trigger       string  `toml:"trigger"`        // "on_read", "on_write", "on_read_write"
-	Register      uint16  `toml:"register"`       // Register address (hex or decimal)
-	Action        string  `toml:"action"`         // "set_value", "increment", "decrement", "toggle", "write_register"
-	Value         *uint16 `toml:"value"`          // Optional: Value for set_value action OR condition value for on_write trigger
-	WriteRegister *uint16 `toml:"write_register"` // Optional: Target register for write_register action
-	WriteValue    *uint16 `toml:"write_value"`    // Optional: Value to write for write_register action
+	Trigger       string     `toml:"trigger"`
+	Register      uint16     `toml:"register"`
+	Action        string     `toml:"action"`
+	Plugin        string     `toml:"plugin"`
+	Value         *RuleValue `toml:"value"`
+	WriteRegister *uint16    `toml:"write_register"`
+	WriteValue    *uint16    `toml:"write_value"`
 }
 
 // Load reads and parses a TOML configuration file
@@ -110,7 +137,7 @@ func (c *Config) GetTransportByAddress(address string) *Transport {
 	return nil
 }
 
-// Validate checks if a rule is valid
+// Validate checks if a rule is valid.
 func (r *Rule) Validate() error {
 	validTriggers := map[string]bool{
 		"on_read":       true,
@@ -118,7 +145,26 @@ func (r *Rule) Validate() error {
 		"on_read_write": true,
 	}
 	if !validTriggers[r.Trigger] {
-		return fmt.Errorf("invalid trigger %q, must be one of: on_read, on_write, on_read_write", r.Trigger)
+		return fmt.Errorf(
+			"invalid trigger %q, must be one of: "+
+				"on_read, on_write, on_read_write",
+			r.Trigger,
+		)
+	}
+
+	if r.Action != "" && r.Plugin != "" {
+		return fmt.Errorf(
+			"rule cannot specify both 'action' and 'plugin'",
+		)
+	}
+	if r.Action == "" && r.Plugin == "" {
+		return fmt.Errorf(
+			"rule must specify either 'action' or 'plugin'",
+		)
+	}
+
+	if r.Plugin != "" {
+		return nil
 	}
 
 	validActions := map[string]bool{
@@ -129,20 +175,27 @@ func (r *Rule) Validate() error {
 		"write_register": true,
 	}
 	if !validActions[r.Action] {
-		return fmt.Errorf("invalid action %q, must be one of: set_value, increment, decrement, toggle, write_register", r.Action)
+		return fmt.Errorf(
+			"invalid action %q, must be one of: "+
+				"set_value, increment, decrement, toggle, write_register",
+			r.Action,
+		)
 	}
 
-	// Validate action-specific requirements
 	if r.Action == "set_value" && r.Value == nil {
 		return fmt.Errorf("set_value action requires 'value' field")
 	}
 
 	if r.Action == "write_register" {
 		if r.WriteRegister == nil {
-			return fmt.Errorf("write_register action requires 'write_register' field")
+			return fmt.Errorf(
+				"write_register action requires 'write_register' field",
+			)
 		}
 		if r.WriteValue == nil {
-			return fmt.Errorf("write_register action requires 'write_value' field")
+			return fmt.Errorf(
+				"write_register action requires 'write_value' field",
+			)
 		}
 	}
 

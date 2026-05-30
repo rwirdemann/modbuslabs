@@ -44,6 +44,12 @@ address = "localhost:502"
   write_register = 0xA668     # status register (42600)
   write_value = 0x1000        # ready for upload
 
+  [[slave.rule]]
+  trigger = "on_write"
+  register = 0xA672            # addr upload
+  value = "any"                # firmware update
+  plugin = "receive_package"
+
   # Example: Toggle a register value each time it's written
   # [[slave.rule]]
   # trigger = "on_write"
