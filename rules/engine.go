@@ -17,20 +17,20 @@ const (
 
 // Engine manages and executes rules for register operations
 type Engine struct {
-	rules map[uint16][]config.Rule // map[register]rules
+	rules    map[uint16][]config.Rule
+	registry Registry
 }
 
-// NewEngine creates a new rule engine from configuration rules
-func NewEngine(configRules []config.Rule) *Engine {
+// NewEngine creates a new rule engine from configuration rules. A nil
+// registry is safe when no plugins are used.
+func NewEngine(configRules []config.Rule, registry Registry) *Engine {
 	e := &Engine{
-		rules: make(map[uint16][]config.Rule),
+		rules:    make(map[uint16][]config.Rule),
+		registry: registry,
 	}
-
-	// Index rules by register for faster lookup
 	for _, rule := range configRules {
 		e.rules[rule.Register] = append(e.rules[rule.Register], rule)
 	}
-
 	return e
 }
 
@@ -56,7 +56,11 @@ func (e *Engine) ApplyReadRules(register uint16, currentValue uint16) (uint16, b
 	return 0, false
 }
 
-func (e *Engine) ApplyWriteRules(register uint16, currentValue uint16, registers map[uint16]uint16) (uint16, uint16, bool) {
+func (e *Engine) ApplyWriteRules(
+	register uint16,
+	currentValue uint16,
+	registers map[uint16]uint16,
+) (uint16, uint16, bool) {
 	rules, exists := e.rules[register]
 	if !exists {
 		return 0, 0, false
@@ -66,14 +70,49 @@ func (e *Engine) ApplyWriteRules(register uint16, currentValue uint16, registers
 		if !e.shouldTrigger(rule.Trigger, TriggerOnWrite) {
 			continue
 		}
-
 		if rule.Value != nil && !rule.Value.Any &&
-			rule.Value.V == currentValue {
-			return *rule.WriteRegister, *rule.WriteValue, true
+			rule.Value.V != currentValue {
+			continue
 		}
+		if rule.Plugin != "" {
+			e.callPlugin(
+				rule.Plugin, register, currentValue, registers,
+			)
+			return 0, 0, false
+		}
+		return *rule.WriteRegister, *rule.WriteValue, true
 	}
 
 	return 0, 0, false
+}
+
+func (e *Engine) callPlugin(
+	name string,
+	register, value uint16,
+	registers map[uint16]uint16,
+) {
+	if e.registry == nil {
+		slog.Error("no plugin registry configured", "plugin", name)
+		return
+	}
+	p, ok := e.registry[name]
+	if !ok {
+		slog.Error("plugin not found", "plugin", name)
+		return
+	}
+	if err := p.Execute(register, value, registers); err != nil {
+		slog.Error("plugin error",
+			"plugin", name,
+			"register", fmt.Sprintf("0x%04X", register),
+			"error", err,
+		)
+		return
+	}
+	slog.Debug("plugin executed",
+		"plugin", name,
+		"register", fmt.Sprintf("0x%04X", register),
+		"value", fmt.Sprintf("0x%04X", value),
+	)
 }
 
 func (e *Engine) Status() string {

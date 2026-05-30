@@ -14,7 +14,9 @@ import (
 	"github.com/rwirdemann/modbuslabs"
 	"github.com/rwirdemann/modbuslabs/config"
 	"github.com/rwirdemann/modbuslabs/console"
+	"github.com/rwirdemann/modbuslabs/plugins"
 	"github.com/rwirdemann/modbuslabs/rtu"
+	"github.com/rwirdemann/modbuslabs/rules"
 	"github.com/rwirdemann/modbuslabs/socat"
 	"github.com/rwirdemann/modbuslabs/tcp"
 )
@@ -96,8 +98,12 @@ func run() int {
 
 	go console.NewKeyboardAdapter(modbus, protocolPort).Start(cancel)
 
+	registry := rules.Registry{
+		"receive_package": &plugins.ReceivePackage{},
+	}
+
 	for _, s := range cfg.Slaves {
-		modbus.ConnectSlaveWithConfig(s, s.Address)
+		modbus.ConnectSlaveWithConfig(s, s.Address, registry)
 		slog.Debug("Connected slave", "id", s.ID, "address", s.Address)
 	}
 

@@ -200,17 +200,31 @@ func (g *Gateway) ConnectSlave(unitID uint8, url string) error {
 		return nil
 	}
 
-	g.slaves[url][unitID] = NewSlave(unitID, true, rules.NewEngine(nil), g.protocolPort)
+	g.slaves[url][unitID] = NewSlave(
+		unitID, true, rules.NewEngine(nil, nil), g.protocolPort,
+	)
 	slog.Debug("slave connected", "unitID", unitID, "url", url)
 	return nil
 }
 
-// ConnectSlaveWithConfig connects a slave with configuration including rules
-func (h *Gateway) ConnectSlaveWithConfig(slaveConfig config.Slave, url string) {
+// ConnectSlaveWithConfig connects a slave with configuration and plugin
+// registry. Pass a nil registry when no plugins are used.
+func (h *Gateway) ConnectSlaveWithConfig(
+	slaveConfig config.Slave,
+	url string,
+	registry rules.Registry,
+) {
 	if _, exists := h.slaves[url][slaveConfig.ID]; !exists {
-		ruleEngine := rules.NewEngine(slaveConfig.Rules)
-		h.slaves[url][slaveConfig.ID] = NewSlave(slaveConfig.ID, true, ruleEngine, h.protocolPort)
-		slog.Debug("Slave connected with rules", "unitID", slaveConfig.ID, "url", url, "ruleCount", len(slaveConfig.Rules))
+		ruleEngine := rules.NewEngine(slaveConfig.Rules, registry)
+		h.slaves[url][slaveConfig.ID] = NewSlave(
+			slaveConfig.ID, true, ruleEngine, h.protocolPort,
+		)
+		slog.Debug(
+			"Slave connected with rules",
+			"unitID", slaveConfig.ID,
+			"url", url,
+			"ruleCount", len(slaveConfig.Rules),
+		)
 	}
 }
 
