@@ -25,8 +25,12 @@ func (s *Slave) Process(pdu PDU) *PDU {
 	switch pdu.FunctionCode {
 	case FC2ReadDiscreteRegisters:
 		return s.processFC2(pdu)
+	case FC4ReadInputRegisters:
+		return s.processFC4(pdu)
 	case FC6WriteSingleRegister:
 		return s.processFC6(pdu)
+	case FC16WriteMultipleRegisters:
+		return s.processFC16(pdu)
 	case FC17ReadWriteMultipleRegisters:
 		return s.processFC17(pdu)
 	}
@@ -39,7 +43,7 @@ func (h *Slave) processFC2(pdu PDU) *PDU {
 	startAddr := encoding.BytesToUint16(pdu.Payload[0:2])
 	quantity := encoding.BytesToUint16(pdu.Payload[2:4])
 	h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%X Quantity=%d", pdu.FunctionCode, pdu.UnitId, startAddr, quantity)))
-	var values = make([]bool, quantity)
+	values := make([]bool, quantity)
 
 	// Read values from registers map
 	for i := range quantity {
@@ -56,9 +60,15 @@ func (h *Slave) processFC2(pdu PDU) *PDU {
 		// Apply read rules. The rule is applied after the register value has been read
 		// from the store. The read value is the value that is going to be changed after
 		// it has been returned to the master. The new value is update in the store.
-		if newValue, modified := h.ruleEngine.ApplyReadRules(currentAddr, value); modified {
-			h.registers[currentAddr] = newValue
-			h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("R1 FC=2 Rule=set_value UnitID=%d Address=0x%X NewValue(after read)=0x%X", pdu.UnitId, currentAddr, newValue)))
+		if targetReg, newValue, modified := h.ruleEngine.ApplyReadRules(
+			currentAddr, value,
+		); modified {
+			h.registers[targetReg] = newValue
+			h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf(
+				"R1 FC=2 Rule applied UnitID=%d"+
+					" WriteAddress=0x%X NewValue=0x%X",
+				pdu.UnitId, targetReg, newValue,
+			)))
 		}
 
 		// Convert register value to boolean (0x0000 = false, anything else = true)
@@ -85,6 +95,60 @@ func (h *Slave) processFC2(pdu PDU) *PDU {
 	return res
 }
 
+func (s *Slave) processFC4(pdu PDU) *PDU {
+	addr := encoding.BytesToUint16(pdu.Payload[0:2])
+	quantity := encoding.BytesToUint16(pdu.Payload[2:4])
+	s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf(
+		"TX FC=%d UnitID=%d Address=0x%X Quantity=%d",
+		pdu.FunctionCode, pdu.UnitId, addr, quantity,
+	)))
+	byteCount := uint8(quantity * 2)
+	res := &PDU{
+		UnitId:       pdu.UnitId,
+		FunctionCode: pdu.FunctionCode,
+		Payload:      make([]byte, 1+byteCount),
+	}
+	res.Payload[0] = byteCount
+
+	payloadIndex := 1
+	values := ""
+	for i := range quantity {
+		currentAddr := addr + i
+		value := s.registers[currentAddr]
+		if len(values) > 0 {
+			values += ", "
+		}
+		values += fmt.Sprintf("0x%X => 0x%X", currentAddr, value)
+		slog.Debug(
+			"FC4 read",
+			"unitID", pdu.UnitId,
+			"addr", fmt.Sprintf("0x%04X", currentAddr),
+			"value", fmt.Sprintf("0x%04X", value),
+		)
+		if targetReg, newValue, modified := s.ruleEngine.ApplyReadRules(
+			currentAddr, value,
+		); modified {
+			s.registers[targetReg] = newValue
+			s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf(
+				"R1 FC=4 Rule applied UnitID=%d"+
+					" WriteAddress=0x%X NewValue=0x%X",
+				pdu.UnitId, targetReg, newValue,
+			)))
+		}
+		copy(
+			res.Payload[payloadIndex:payloadIndex+2],
+			encoding.Uint16ToBytes(value),
+		)
+		payloadIndex += 2
+	}
+
+	s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf(
+		"RX FC=%d UnitID=%d Address=0x%X Values=%s",
+		pdu.FunctionCode, pdu.UnitId, addr, values,
+	)))
+	return res
+}
+
 // FC6 payload format: [regAddr(2 bytes)][value(2 bytes)]
 func (s *Slave) processFC6(pdu PDU) *PDU {
 	addr := encoding.BytesToUint16(pdu.Payload[0:2])
@@ -95,7 +159,9 @@ func (s *Slave) processFC6(pdu PDU) *PDU {
 	s.registers[addr] = value
 	slog.Debug("FC6 Write Single Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%04X", value))
 
-	if targetRegister, targetValue, applied := s.ruleEngine.ApplyWriteRules(addr, value, s.registers); applied {
+	if targetRegister, targetValue, applied := s.ruleEngine.ApplyWriteRules(
+		addr, value, s.registers, pdu.Payload,
+	); applied {
 		s.registers[targetRegister] = targetValue
 		s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("R1 FC=6 Rule applied UnitID=%d WriteAddress=0x%X NewValue=0x%X", pdu.UnitId, targetRegister, targetValue)))
 	}
@@ -109,6 +175,57 @@ func (s *Slave) processFC6(pdu PDU) *PDU {
 		FunctionCode: pdu.FunctionCode,
 		Payload:      pdu.Payload[0:4], // Echo back address and value
 	}
+	return res
+}
+
+func (s *Slave) processFC16(pdu PDU) *PDU {
+	// FC16 payload format: [startAddr(2 bytes)][quantity(2 bytes)][byteCount(1 byte)][values(N bytes)]
+	// addr and quantity already extracted at the beginning
+	addr := encoding.BytesToUint16(pdu.Payload[0:2])
+	quantity := encoding.BytesToUint16(pdu.Payload[2:4])
+	slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "quantitiy", quantity, "pdu", pdu)
+	byteCount := pdu.Payload[4]
+
+	// Validate payload length
+	expectedLength := 5 + int(byteCount)
+	if len(pdu.Payload) < expectedLength {
+		slog.Debug("FC16 invalid payload length", "expected", expectedLength, "got", len(pdu.Payload))
+		return nil
+	}
+
+	// Validate byte count matches quantity
+	if byteCount != uint8(quantity*2) {
+		slog.Debug("FC16 byte count mismatch", "expected", quantity*2, "got", byteCount)
+		return nil
+	}
+
+	// Write all register values
+	valueIndex := 5 // Start after: addr(2) + quantity(2) + byteCount(1)
+	values := ""
+	for i := range quantity {
+		currentAddr := addr + i
+		value := encoding.BytesToUint16(pdu.Payload[valueIndex : valueIndex+2])
+		s.registers[currentAddr] = value
+		slog.Debug("FC16 Write Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("%X", currentAddr), "value", fmt.Sprintf("%X", value))
+		if len(values) > 0 {
+			values += ", "
+		}
+		values += fmt.Sprintf("0x%X => 0x%X", currentAddr, value)
+		valueIndex += 2
+	}
+
+	s.ruleEngine.ApplyWriteRules(addr, 0, s.registers, pdu.Payload)
+	m := message.NewEncoded(fmt.Sprintf("TX FC=%d UnitID=%d Address=0x%04X Quantity=%d ByteCount=%d Values: %s",
+		pdu.FunctionCode, pdu.UnitId, addr, quantity, byteCount, values))
+	s.protocolPort.InfoX(m)
+
+	// FC16 response: echo back starting address and quantity
+	res := &PDU{
+		UnitId:       pdu.UnitId,
+		FunctionCode: pdu.FunctionCode,
+		Payload:      pdu.Payload[0:4], // Echo back address and quantity
+	}
+	s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("RX FC=%d UnitID=%d Payload=% X", res.FunctionCode, res.UnitId, res.Payload)))
 	return res
 }
 
@@ -151,7 +268,9 @@ func (s *Slave) processFC17(pdu PDU) *PDU {
 		slog.Debug("FC17 Write Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%04X", value))
 
 		// Apply write rules
-		if targetRegister, targetValue, applied := s.ruleEngine.ApplyWriteRules(addr, value, s.registers); applied {
+		if targetRegister, targetValue, applied := s.ruleEngine.ApplyWriteRules(
+			addr, value, s.registers, pdu.Payload,
+		); applied {
 			s.registers[targetRegister] = targetValue
 			s.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf("R1 FC=17 Rule applied UnitID=%d WriteAddress=0x%X NewValue=0x%X", pdu.UnitId, targetRegister, targetValue)))
 		}

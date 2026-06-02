@@ -201,3 +201,10 @@ func (r *Rule) Validate() error {
 
 	return nil
 }
+
+func (r *Rule) ActionString() string {
+	if r.Action != "" {
+		return r.Action
+	}
+	return r.Plugin
+}

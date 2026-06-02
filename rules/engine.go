@@ -34,32 +34,53 @@ func NewEngine(configRules []config.Rule, registry Registry) *Engine {
 	return e
 }
 
-func (e *Engine) ApplyReadRules(register uint16, currentValue uint16) (uint16, bool) {
+// ApplyReadRules returns the target register, the new value, and whether a
+// rule fired. For set_value the target is the same register; for
+// write_register the target is the register named in the rule.
+func (e *Engine) ApplyReadRules(
+	register uint16,
+	currentValue uint16,
+) (uint16, uint16, bool) {
 	rules, exists := e.rules[register]
 	if !exists {
-		return 0, false
+		return 0, 0, false
 	}
 	for _, rule := range rules {
 		if !e.shouldTrigger(rule.Trigger, TriggerOnRead) {
 			continue
 		}
-		slog.Debug("Rule executed",
+		if rule.Action == "write_register" {
+			slog.Debug(
+				"Rule executed",
+				"register", fmt.Sprintf("0x%04X", register),
+				"trigger", rule.Trigger,
+				"action", rule.Action,
+				"writeRegister",
+				fmt.Sprintf("0x%04X", *rule.WriteRegister),
+				"writeValue",
+				fmt.Sprintf("0x%04X", *rule.WriteValue),
+			)
+			return *rule.WriteRegister, *rule.WriteValue, true
+		}
+		slog.Debug(
+			"Rule executed",
 			"register", fmt.Sprintf("0x%04X", register),
 			"trigger", rule.Trigger,
 			"action", rule.Action,
 			"oldValue", fmt.Sprintf("0x%04X", currentValue),
 			"newValue", fmt.Sprintf("0x%04X", rule.Value.V),
 		)
-		return rule.Value.V, true
+		return register, rule.Value.V, true
 	}
 
-	return 0, false
+	return 0, 0, false
 }
 
 func (e *Engine) ApplyWriteRules(
 	register uint16,
 	currentValue uint16,
 	registers map[uint16]uint16,
+	payload []byte,
 ) (uint16, uint16, bool) {
 	rules, exists := e.rules[register]
 	if !exists {
@@ -76,7 +97,7 @@ func (e *Engine) ApplyWriteRules(
 		}
 		if rule.Plugin != "" {
 			e.callPlugin(
-				rule.Plugin, register, currentValue, registers,
+				rule.Plugin, register, currentValue, registers, payload,
 			)
 			return 0, 0, false
 		}
@@ -90,6 +111,7 @@ func (e *Engine) callPlugin(
 	name string,
 	register, value uint16,
 	registers map[uint16]uint16,
+	payload []byte,
 ) {
 	if e.registry == nil {
 		slog.Error("no plugin registry configured", "plugin", name)
@@ -100,15 +122,17 @@ func (e *Engine) callPlugin(
 		slog.Error("plugin not found", "plugin", name)
 		return
 	}
-	if err := p.Execute(register, value, registers); err != nil {
-		slog.Error("plugin error",
+	if err := p.Execute(register, value, registers, payload); err != nil {
+		slog.Error(
+			"plugin error",
 			"plugin", name,
 			"register", fmt.Sprintf("0x%04X", register),
 			"error", err,
 		)
 		return
 	}
-	slog.Debug("plugin executed",
+	slog.Debug(
+		"plugin executed",
 		"plugin", name,
 		"register", fmt.Sprintf("0x%04X", register),
 		"value", fmt.Sprintf("0x%04X", value),
@@ -122,7 +146,10 @@ func (e *Engine) Status() string {
 	s := "\n    Rules:"
 	for register, rules := range e.rules {
 		for i, r := range rules {
-			s = fmt.Sprintf("%s\n    - R%d: 0x%04X => %s %s", s, i+1, register, r.Trigger, r.Action)
+			s = fmt.Sprintf(
+				"%s\n    - R%d: 0x%04X => %s %s",
+				s, i+1, register, r.Trigger, r.ActionString(),
+			)
 		}
 	}
 	return s

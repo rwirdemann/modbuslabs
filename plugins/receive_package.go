@@ -5,22 +5,31 @@ import (
 	"log/slog"
 )
 
-// ReceivePackage accumulates register values written across consecutive
-// FC6 writes, modeling a multi-chunk firmware upload.
 type ReceivePackage struct {
-	chunks []uint16
+	pu uint32
 }
 
-// Execute appends value to the accumulated chunk list and logs progress.
 func (r *ReceivePackage) Execute(
 	register, value uint16,
-	_ map[uint16]uint16,
+	registers map[uint16]uint16,
+	payload []byte,
 ) error {
-	r.chunks = append(r.chunks, value)
-	slog.Info("receive_package",
+	byteCount := payload[4]
+	if byteCount == 246 {
+		r.pu += uint32(byteCount - 4)
+		addrHigh := uint16(r.pu >> 16)
+		addrLow := uint16(r.pu & 0xFFFF)
+		registers[0xA669] = addrHigh
+		registers[0xA66A] = addrLow
+		registers[0xA668] = 0x1000
+	} else {
+		registers[0xA668] = 0x1200
+	}
+
+	slog.Info(
+		"receive_package",
 		"register", fmt.Sprintf("0x%04X", register),
 		"value", fmt.Sprintf("0x%04X", value),
-		"total_chunks", len(r.chunks),
 	)
 	return nil
 }

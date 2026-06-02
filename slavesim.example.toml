@@ -28,39 +28,43 @@ address = "localhost:503"
 id = 101
 address = "localhost:502"
 
-  # Rules define behavioral patterns for this slave
-  # When register 0x7e33 is read, automatically set its value to false (0x0000)
-  [[slave.rule]]
-  trigger = "on_read"
-  register = 0x7e33
-  action = "set_value"
-  value = 0x0000
-
+  # Firmware update simulation rules
   [[slave.rule]]
   trigger = "on_write"
-  register = 0xA66D            # befehls register (42605)
-  value = 1                    # firmware update
+  register = 0xA66D            # command register (42605)
+  value = 0x0100               # firmware update
   action = "write_register"
-  write_register = 0xA668     # status register (42600)
-  write_value = 0x1000        # ready for upload
+  write_register = 0xA668      # status register (42600)
+  write_value = 0x1000         # ready for upload
 
   [[slave.rule]]
   trigger = "on_write"
-  register = 0xA672            # addr upload
-  value = "any"                # firmware update
+  register = 0xA66D            # command register (42605)
+  value = 0x2000               # validate image
+  action = "write_register"
+  write_register = 0xA668      # status register (42600)
+  write_value = 0x2000         # image validated
+
+  [[slave.rule]]
+  trigger = "on_write"
+  register = 0xA66D            # command register (42605)
+  value = 0x3000               # run upgrade
+  action = "write_register"
+  write_register = 0x791E      # firmware version
+  write_value = 9109
+
+  [[slave.rule]]
+  trigger = "on_write"
+  register = 0xA672            # upload address register
+  value = "any"
   plugin = "receive_package"
 
-  # Example: Toggle a register value each time it's written
-  # [[slave.rule]]
-  # trigger = "on_write"
-  # register = 0x1000
-  # action = "toggle"
-
-  # Example: Increment a counter register on every read
-  # [[slave.rule]]
-  # trigger = "on_read"
-  # register = 0x2000
-  # action = "increment"
+  [[slave.rule]]
+  trigger = "on_read"
+  register = 0x791E            # firmware version
+  action = "write_register"
+  write_register = 0xA668      # status register (42600)
+  write_value = 0x0000         # idle
 
 # Example: Add more slaves as needed
 # [[slave]]
