@@ -8,6 +8,7 @@ import (
 
 	"github.com/rwirdemann/modbuslabs/config"
 	"github.com/rwirdemann/modbuslabs/encoding"
+	"github.com/rwirdemann/modbuslabs/message"
 	"github.com/rwirdemann/modbuslabs/rules"
 )
 
@@ -68,7 +69,10 @@ func (h *Gateway) processPDU(pdu PDU) *PDU {
 	defer h.slaveLock.Unlock()
 	slave, exists := h.findSlave(pdu.UnitId)
 	if !exists || !slave.connected {
-		h.protocolPort.Info(fmt.Sprintf("slave %d does not exist or is offline", pdu.UnitId))
+		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf(
+			"slave %d does not exist or is offline",
+			pdu.UnitId,
+		)))
 		return nil
 	}
 
@@ -98,7 +102,10 @@ func (h *Gateway) processPDU(pdu PDU) *PDU {
 			FunctionCode: pdu.FunctionCode,
 			Payload:      pdu.Payload[0:4], // Echo back address and value
 		}
-		h.protocolPort.Info(fmt.Sprintf("FC=%X UnitID=%d Address=%X Value=%X", pdu.FunctionCode, pdu.UnitId, addr, value))
+		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf(
+			"FC=%X UnitID=%d Address=%X Value=%X",
+			pdu.FunctionCode, pdu.UnitId, addr, value,
+		)))
 		return res
 	}
 

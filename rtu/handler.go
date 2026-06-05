@@ -9,6 +9,7 @@ import (
 
 	"github.com/goburrow/serial"
 	"github.com/rwirdemann/modbuslabs"
+	"github.com/rwirdemann/modbuslabs/message"
 )
 
 // Start starts the RTU handler.
@@ -109,14 +110,19 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 				pdu.Payload = data[2:n]
 
 				h.protocolPort.Separator()
-				h.protocolPort.Info(fmt.Sprintf("Incomming request on /virtual/com0 => %d", pdu.UnitId))
-				h.protocolPort.Info(fmt.Sprintf("TX % X", data))
+				h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf(
+					"Incomming request on /virtual/com0 => %d",
+					pdu.UnitId,
+				)))
+				h.protocolPort.InfoX(message.NewUnencoded(
+					fmt.Sprintf("TX % X", data),
+				))
 
 				// Verify CRC
 				receivedCRC := binary.LittleEndian.Uint16(data[len(data)-2:])
 				calculatedCRC := calculateCRC(data[:len(data)-2])
 				if receivedCRC != calculatedCRC {
-					h.protocolPort.Info("crc's are not equal")
+					h.protocolPort.InfoX(message.NewEncoded("crc's are not equal"))
 					continue
 				}
 
@@ -135,7 +141,9 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 					response = append(response, byte(crc&0xFF), byte(crc>>8))
 
 					h.serialPort.Write(response)
-					h.protocolPort.Info(fmt.Sprintf("RX % X", response))
+					h.protocolPort.InfoX(message.NewUnencoded(
+						fmt.Sprintf("RX % X", response),
+					))
 				}
 			}
 			h.protocolPort.Separator()

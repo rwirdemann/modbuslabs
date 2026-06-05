@@ -48,12 +48,6 @@ func (p *ProtocolAdapter) Toggle() {
 	}
 }
 
-func (p *ProtocolAdapter) Info(msg string) {
-	p.lastWasSeparator = false
-	ts := time.Now().Format(time.DateTime)
-	p.print(fmt.Sprintf("%s %s", ts, msg), false)
-}
-
 func (p *ProtocolAdapter) Separator() {
 	if p.lastWasSeparator {
 		return
