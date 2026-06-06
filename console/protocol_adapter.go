@@ -7,47 +7,37 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rwirdemann/modbuslabs/message"
 	"golang.org/x/term"
 )
 
+// ProtocolAdapter implements ProtocolPort, writing to an io.Writer.
 type ProtocolAdapter struct {
 	muted            bool
-	loglevel         message.Type
 	writer           io.Writer
 	lastWasSeparator bool
 }
 
+// NewProtocolAdapter returns a ProtocolAdapter writing to stdout.
 func NewProtocolAdapter() *ProtocolAdapter {
-	return &ProtocolAdapter{
-		loglevel: message.TypeUnencoded,
-		writer:   os.Stdout, // Default to stdout
-	}
+	return &ProtocolAdapter{writer: os.Stdout}
 }
 
+// SetWriter redirects output to w.
 func (p *ProtocolAdapter) SetWriter(w io.Writer) {
 	p.writer = w
 }
 
-func (p *ProtocolAdapter) InfoX(m message.Message) {
-	if m.Type() == p.loglevel {
-		p.lastWasSeparator = false
-		ts := time.Now().Format(time.DateTime)
-		p.print(fmt.Sprintf("%s %s", ts, m.String()), false)
+// Info logs s with a timestamp unless muted.
+func (p *ProtocolAdapter) Info(s string) {
+	if p.muted {
+		return
 	}
+	p.lastWasSeparator = false
+	ts := time.Now().Format(time.DateTime)
+	fmt.Fprintln(p.writer, ts+" "+s)
 }
 
-func (p *ProtocolAdapter) Toggle() {
-	switch p.loglevel {
-	case message.TypeEncoded:
-		p.loglevel = message.TypeUnencoded
-		p.Println("loglevel set to 'Unencoded'")
-	case message.TypeUnencoded:
-		p.loglevel = message.TypeEncoded
-		p.Println("loglevel set to 'Encoded'")
-	}
-}
-
+// Separator prints a horizontal rule, suppressed when preceded by one.
 func (p *ProtocolAdapter) Separator() {
 	if p.lastWasSeparator {
 		return
@@ -56,32 +46,28 @@ func (p *ProtocolAdapter) Separator() {
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
 		width = w
 	}
-	p.print(strings.Repeat("─", width), false)
+	fmt.Fprintln(p.writer, strings.Repeat("─", width))
 	p.lastWasSeparator = true
 }
 
+// ForceSeparator prints a horizontal rule unconditionally.
 func (p *ProtocolAdapter) ForceSeparator() {
 	p.lastWasSeparator = false
 	p.Separator()
 }
 
+// Println writes msg regardless of muted state.
 func (p *ProtocolAdapter) Println(msg string) {
 	p.lastWasSeparator = false
-	p.print(msg, true)
+	fmt.Fprintln(p.writer, msg)
 }
 
+// Mute suppresses Info output.
 func (p *ProtocolAdapter) Mute() {
 	p.muted = true
 }
 
+// Unmute re-enables Info output.
 func (p *ProtocolAdapter) Unmute() {
 	p.muted = false
-}
-
-func (p *ProtocolAdapter) print(s string, force bool) {
-	if !force && p.muted {
-		return
-	}
-
-	fmt.Fprintln(p.writer, s)
 }

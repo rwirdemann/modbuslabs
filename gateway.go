@@ -8,7 +8,6 @@ import (
 
 	"github.com/rwirdemann/modbuslabs/config"
 	"github.com/rwirdemann/modbuslabs/encoding"
-	"github.com/rwirdemann/modbuslabs/message"
 	"github.com/rwirdemann/modbuslabs/rules"
 )
 
@@ -69,47 +68,53 @@ func (h *Gateway) processPDU(pdu PDU) *PDU {
 	defer h.slaveLock.Unlock()
 	slave, exists := h.findSlave(pdu.UnitId)
 	if !exists || !slave.connected {
-		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf(
-			"slave %d does not exist or is offline",
-			pdu.UnitId,
-		)))
+		h.protocolPort.Info(fmt.Sprintf(
+			"slave %d does not exist or is offline", pdu.UnitId,
+		))
 		return nil
 	}
 
+	h.protocolPort.Info("TX " + pduInfo(pdu))
+
+	var res *PDU
 	switch pdu.FunctionCode {
 	case FC2ReadDiscreteRegisters,
 		FC4ReadInputRegisters,
 		FC6WriteSingleRegister,
 		FC16WriteMultipleRegisters,
 		FC17ReadWriteMultipleRegisters:
-		return slave.Process(pdu)
-	}
-
-	addr := encoding.BytesToUint16(pdu.Payload[0:2])
-
-	if pdu.FunctionCode == FC5WriteSingleCoil {
-		// FC5 payload format: [coilAddr(2 bytes)][value(2 bytes)]. Value is 0xFF00 for ON, 0x0000 for OFF
-		slog.Debug("processPDU", "regAddr", fmt.Sprintf("%X", addr), "pdu", pdu)
+		res = slave.Process(pdu)
+	case FC5WriteSingleCoil:
+		addr := encoding.BytesToUint16(pdu.Payload[0:2])
 		value := encoding.BytesToUint16(pdu.Payload[2:4])
-
-		// Store the coil value (0xFF00 for true, 0x0000 for false)
 		slave.registers[addr] = value
-		slog.Debug("FC5 Write Single Coil", "unitID", pdu.UnitId, "addr", fmt.Sprintf("%X", addr), "value", fmt.Sprintf("%X", value))
-
-		// FC5 response: echo back the request (coil address + value)
-		res := &PDU{
+		res = &PDU{
 			UnitId:       pdu.UnitId,
 			FunctionCode: pdu.FunctionCode,
-			Payload:      pdu.Payload[0:4], // Echo back address and value
+			Payload:      pdu.Payload[0:4],
 		}
-		h.protocolPort.InfoX(message.NewEncoded(fmt.Sprintf(
-			"FC=%X UnitID=%d Address=%X Value=%X",
-			pdu.FunctionCode, pdu.UnitId, addr, value,
-		)))
-		return res
 	}
 
-	return nil
+	if res != nil {
+		h.protocolPort.Info("RX " + pduInfo(*res))
+	}
+	return res
+}
+
+func pduInfo(pdu PDU) string {
+	if len(pdu.Payload) < 4 {
+		return fmt.Sprintf("FC=%d UnitID=%d", pdu.FunctionCode, pdu.UnitId)
+	}
+	addr := encoding.BytesToUint16(pdu.Payload[0:2])
+	second := encoding.BytesToUint16(pdu.Payload[2:4])
+	switch pdu.FunctionCode {
+	case FC5WriteSingleCoil, FC6WriteSingleRegister:
+		return fmt.Sprintf("FC=%d UnitID=%d Address=0x%X Value=0x%X",
+			pdu.FunctionCode, pdu.UnitId, addr, second)
+	default:
+		return fmt.Sprintf("FC=%d UnitID=%d Address=0x%X Quantity=%d",
+			pdu.FunctionCode, pdu.UnitId, addr, second)
+	}
 }
 
 func (g *Gateway) ConnectSlave(unitID uint8, url string) error {
@@ -123,9 +128,7 @@ func (g *Gateway) ConnectSlave(unitID uint8, url string) error {
 		return nil
 	}
 
-	g.slaves[url][unitID] = NewSlave(
-		unitID, true, rules.NewEngine(nil, nil), g.protocolPort,
-	)
+	g.slaves[url][unitID] = NewSlave(unitID, true, rules.NewEngine(nil, nil))
 	slog.Debug("slave connected", "unitID", unitID, "url", url)
 	return nil
 }
@@ -139,9 +142,7 @@ func (h *Gateway) ConnectSlaveWithConfig(
 ) {
 	if _, exists := h.slaves[url][slaveConfig.ID]; !exists {
 		ruleEngine := rules.NewEngine(slaveConfig.Rules, registry)
-		h.slaves[url][slaveConfig.ID] = NewSlave(
-			slaveConfig.ID, true, ruleEngine, h.protocolPort,
-		)
+		h.slaves[url][slaveConfig.ID] = NewSlave(slaveConfig.ID, true, ruleEngine)
 		slog.Debug(
 			"Slave connected with rules",
 			"unitID", slaveConfig.ID,

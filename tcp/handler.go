@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/rwirdemann/modbuslabs"
-	"github.com/rwirdemann/modbuslabs/message"
 )
 
 const (
@@ -101,7 +100,7 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 }
 
 func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDUCallback) error {
-	header, pdu, txnId, err := readMBAPFrame(conn)
+	_, pdu, txnId, err := readMBAPFrame(conn)
 	if err != nil {
 		if err == io.EOF {
 			slog.Debug("client disconnected", "remote addr", conn.RemoteAddr())
@@ -112,8 +111,7 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 	slog.Debug("MBAP header received", "pdu", pdu, "txid", txnId)
 
 	h.protocolPort.Separator()
-	m := message.Unencoded{Value: fmt.Sprintf("TX % X %02X % X", header, pdu.FunctionCode, pdu.Payload)}
-	h.protocolPort.InfoX(m)
+	h.protocolPort.Info(fmt.Sprintf("FC=%d UnitID=%d", pdu.FunctionCode, pdu.UnitId))
 
 	res := processPDU(*pdu)
 
@@ -123,7 +121,6 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 			return err
 		}
 		slog.Debug(fmt.Sprintf("MBAP response written: % X", payload))
-		h.protocolPort.InfoX(message.NewUnencoded(fmt.Sprintf("RX % X", payload)))
 	}
 	h.protocolPort.Separator()
 	return nil

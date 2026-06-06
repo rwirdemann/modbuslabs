@@ -67,8 +67,6 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 		case "mute", "m":
 			a.protocolPort.Mute()
 			a.protocolPort.Println("Protocol output muted. Type 'u' to unmute.")
-		case "toggle", "t":
-			a.protocolPort.Toggle()
 		case "unmute", "u":
 			a.protocolPort.Unmute()
 		case "connect", "c":
@@ -185,7 +183,6 @@ func (a *KeyboardAdapter) Start(cancel context.CancelFunc) {
 			a.protocolPort.Println("  disconnect/d <unitID>             - Disconnect slave")
 			a.protocolPort.Println("  write/w <unitID> <addr> <value>   - Write register value")
 			a.protocolPort.Println("  reset/r <unitID>                  - Reset all registers to 0")
-			a.protocolPort.Println("  toggle/t                          - Toggle output format")
 			a.protocolPort.Println("  help/h                            - Show help")
 			a.protocolPort.Separator()
 		default:

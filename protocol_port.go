@@ -1,9 +1,7 @@
 package modbuslabs
 
-import "github.com/rwirdemann/modbuslabs/message"
-
 type ProtocolPort interface {
-	InfoX(m message.Message)
+	Info(s string)
 
 	// Println logs the output even when it's muted
 	Println(msg string)
@@ -12,5 +10,4 @@ type ProtocolPort interface {
 	ForceSeparator()
 	Mute()
 	Unmute()
-	Toggle()
 }

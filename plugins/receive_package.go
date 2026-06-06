@@ -1,10 +1,5 @@
 package plugins
 
-import (
-	"fmt"
-	"log/slog"
-)
-
 type ReceivePackage struct {
 	pu uint32
 }
@@ -26,10 +21,5 @@ func (r *ReceivePackage) Execute(
 		registers[0xA668] = 0x1200
 	}
 
-	slog.Info(
-		"receive_package",
-		"register", fmt.Sprintf("0x%04X", register),
-		"value", fmt.Sprintf("0x%04X", value),
-	)
 	return nil
 }
