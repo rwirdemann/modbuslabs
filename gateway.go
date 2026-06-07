@@ -66,15 +66,15 @@ func (b *Gateway) findSlave(unitID uint8) (*Slave, bool) {
 func (h *Gateway) processPDU(pdu PDU) *PDU {
 	h.slaveLock.Lock()
 	defer h.slaveLock.Unlock()
-	slave, exists := h.findSlave(pdu.UnitId)
+	slave, exists := h.findSlave(pdu.UnitID)
 	if !exists || !slave.connected {
 		h.protocolPort.Info(fmt.Sprintf(
-			"slave %d does not exist or is offline", pdu.UnitId,
+			"slave %d does not exist or is offline", pdu.UnitID,
 		))
 		return nil
 	}
 
-	h.protocolPort.Info("TX " + pduInfo(pdu))
+	h.protocolPort.Info("TX " + pdu.String())
 
 	var res *PDU
 	switch pdu.FunctionCode {
@@ -89,32 +89,16 @@ func (h *Gateway) processPDU(pdu PDU) *PDU {
 		value := encoding.BytesToUint16(pdu.Payload[2:4])
 		slave.registers[addr] = value
 		res = &PDU{
-			UnitId:       pdu.UnitId,
+			UnitID:       pdu.UnitID,
 			FunctionCode: pdu.FunctionCode,
 			Payload:      pdu.Payload[0:4],
 		}
 	}
 
 	if res != nil {
-		h.protocolPort.Info("RX " + pduInfo(*res))
+		h.protocolPort.Info("RX " + res.String())
 	}
 	return res
-}
-
-func pduInfo(pdu PDU) string {
-	if len(pdu.Payload) < 4 {
-		return fmt.Sprintf("FC=%d UnitID=%d", pdu.FunctionCode, pdu.UnitId)
-	}
-	addr := encoding.BytesToUint16(pdu.Payload[0:2])
-	second := encoding.BytesToUint16(pdu.Payload[2:4])
-	switch pdu.FunctionCode {
-	case FC5WriteSingleCoil, FC6WriteSingleRegister:
-		return fmt.Sprintf("FC=%d UnitID=%d Address=0x%X Value=0x%X",
-			pdu.FunctionCode, pdu.UnitId, addr, second)
-	default:
-		return fmt.Sprintf("FC=%d UnitID=%d Address=0x%X Quantity=%d",
-			pdu.FunctionCode, pdu.UnitId, addr, second)
-	}
 }
 
 func (g *Gateway) ConnectSlave(unitID uint8, url string) error {

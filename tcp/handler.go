@@ -111,7 +111,6 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 	slog.Debug("MBAP header received", "pdu", pdu, "txid", txnId)
 
 	h.protocolPort.Separator()
-	h.protocolPort.Info(fmt.Sprintf("FC=%d UnitID=%d", pdu.FunctionCode, pdu.UnitId))
 
 	res := processPDU(*pdu)
 
@@ -139,7 +138,6 @@ func (h *Handler) processRequest(conn net.Conn, processPDU modbuslabs.ProcessPDU
 //
 // Returns the header, [PDU] and transaction id on success.
 func readMBAPFrame(conn io.Reader) ([]byte, *modbuslabs.PDU, uint16, error) {
-
 	// read the MBAP header
 	header := make([]byte, MBAPHeaderLength)
 	_, err := io.ReadFull(conn, header)
@@ -186,7 +184,7 @@ func readMBAPFrame(conn io.Reader) ([]byte, *modbuslabs.PDU, uint16, error) {
 
 	// store unit id, function code and payload in the PDU object
 	pdu := &modbuslabs.PDU{
-		UnitId:       unitId,
+		UnitID:       unitId,
 		FunctionCode: rxbuf[0],
 		Payload:      rxbuf[1:],
 	}

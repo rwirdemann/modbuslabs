@@ -52,7 +52,7 @@ func (h *Slave) processFC2(pdu PDU) *PDU {
 		var value uint16
 		if regValue, exists := h.registers[currentAddr]; exists {
 			value = regValue
-			slog.Debug("FC2 reading from map", "unitID", pdu.UnitId, "addr", currentAddr, "value", value)
+			slog.Debug("FC2 reading from map", "unitID", pdu.UnitID, "addr", currentAddr, "value", value)
 		} else {
 			slog.Debug("no value for discrete input", "addr", currentAddr)
 		}
@@ -66,7 +66,7 @@ func (h *Slave) processFC2(pdu PDU) *PDU {
 
 	resCount := len(values)
 	res := &PDU{
-		UnitId:       pdu.UnitId,
+		UnitID:       pdu.UnitID,
 		FunctionCode: pdu.FunctionCode,
 		Payload:      []byte{0},
 	}
@@ -84,9 +84,10 @@ func (s *Slave) processFC4(pdu PDU) *PDU {
 	quantity := encoding.BytesToUint16(pdu.Payload[2:4])
 	byteCount := uint8(quantity * 2)
 	res := &PDU{
-		UnitId:       pdu.UnitId,
+		UnitID:       pdu.UnitID,
 		FunctionCode: pdu.FunctionCode,
 		Payload:      make([]byte, 1+byteCount),
+		IsResponse:   true,
 	}
 	res.Payload[0] = byteCount
 
@@ -96,7 +97,7 @@ func (s *Slave) processFC4(pdu PDU) *PDU {
 		value := s.registers[currentAddr]
 		slog.Debug(
 			"FC4 read",
-			"unitID", pdu.UnitId,
+			"unitID", pdu.UnitID,
 			"addr", fmt.Sprintf("0x%04X", currentAddr),
 			"value", fmt.Sprintf("0x%04X", value),
 		)
@@ -120,7 +121,7 @@ func (s *Slave) processFC6(pdu PDU) *PDU {
 	value := encoding.BytesToUint16(pdu.Payload[2:4])
 
 	s.registers[addr] = value
-	slog.Debug("FC6 Write Single Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%04X", value))
+	slog.Debug("FC6 Write Single Register", "unitID", pdu.UnitID, "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%04X", value))
 
 	if targetRegister, targetValue, applied := s.ruleEngine.ApplyWriteRules(
 		addr, value, s.registers, pdu.Payload,
@@ -129,9 +130,10 @@ func (s *Slave) processFC6(pdu PDU) *PDU {
 	}
 
 	return &PDU{
-		UnitId:       pdu.UnitId,
+		UnitID:       pdu.UnitID,
 		FunctionCode: pdu.FunctionCode,
 		Payload:      pdu.Payload[0:4],
+		IsResponse:   true,
 	}
 }
 
@@ -161,15 +163,16 @@ func (s *Slave) processFC16(pdu PDU) *PDU {
 		currentAddr := addr + i
 		value := encoding.BytesToUint16(pdu.Payload[valueIndex : valueIndex+2])
 		s.registers[currentAddr] = value
-		slog.Debug("FC16 Write Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("%X", currentAddr), "value", fmt.Sprintf("%X", value))
+		slog.Debug("FC16 Write Register", "unitID", pdu.UnitID, "addr", fmt.Sprintf("%X", currentAddr), "value", fmt.Sprintf("%X", value))
 		valueIndex += 2
 	}
 
 	s.ruleEngine.ApplyWriteRules(addr, 0, s.registers, pdu.Payload)
 	return &PDU{
-		UnitId:       pdu.UnitId,
+		UnitID:       pdu.UnitID,
 		FunctionCode: pdu.FunctionCode,
 		Payload:      pdu.Payload[0:4],
+		IsResponse:   true,
 	}
 }
 
@@ -204,7 +207,7 @@ func (s *Slave) processFC17(pdu PDU) *PDU {
 		addr := writeAddr + i
 		value := encoding.BytesToUint16(writeValues[i*2 : i*2+2])
 		s.registers[addr] = value
-		slog.Debug("FC17 Write Register", "unitID", pdu.UnitId, "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%04X", value))
+		slog.Debug("FC17 Write Register", "unitID", pdu.UnitID, "addr", fmt.Sprintf("0x%04X", addr), "value", fmt.Sprintf("0x%04X", value))
 		if targetRegister, targetValue, applied := s.ruleEngine.ApplyWriteRules(
 			addr, value, s.registers, pdu.Payload,
 		); applied {
@@ -217,7 +220,7 @@ func (s *Slave) processFC17(pdu PDU) *PDU {
 	responsePayload := append([]byte{readByteCount}, responseData...)
 
 	return &PDU{
-		UnitId:       pdu.UnitId,
+		UnitID:       pdu.UnitID,
 		FunctionCode: pdu.FunctionCode,
 		Payload:      responsePayload,
 	}

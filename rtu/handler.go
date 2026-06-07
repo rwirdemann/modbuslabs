@@ -104,7 +104,7 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 					slog.Error("Received bytes < 4")
 					continue
 				}
-				pdu.UnitId = data[0]
+				pdu.UnitID = data[0]
 				pdu.FunctionCode = data[1]
 				pdu.Payload = data[2:n]
 
@@ -124,7 +124,7 @@ func (h *Handler) startRequestCycle(ctx context.Context, processPDU modbuslabs.P
 				if res != nil {
 					// Build complete RTU frame: UnitId + FunctionCode + Payload + CRC
 					response := make([]byte, 0, 2+len(res.Payload))
-					response = append(response, res.UnitId)
+					response = append(response, res.UnitID)
 					response = append(response, res.FunctionCode)
 					response = append(response, res.Payload...)
 
