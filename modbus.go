@@ -41,14 +41,14 @@ func (p PDU) String() string {
 	case FC5WriteSingleCoil, FC6WriteSingleRegister:
 		value := p.Payload[2:4]
 		return fmt.Sprintf(
-			"FC=%d UnitID=%d Addr=%X Value=% X",
+			"FC=%d UnitID=%d Addr=%d Value=% X",
 			p.FunctionCode, p.UnitID, addr, value,
 		)
 	case FC16WriteMultipleRegisters:
 		qty := encoding.BytesToUint16(p.Payload[2:4])
 		value := p.Payload[5:]
 		return fmt.Sprintf(
-			"FC=%d UnitID=%d Addr=%X Qty=%d Value=% X",
+			"FC=%d UnitID=%d Addr=%d Qty=%d Value=% X",
 			p.FunctionCode, p.UnitID, addr, qty, value,
 		)
 	case FC17ReadWriteMultipleRegisters:

@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/rwirdemann/modbuslabs/config"
-	"github.com/rwirdemann/modbuslabs/encoding"
 	"github.com/rwirdemann/modbuslabs/rules"
 )
 
@@ -74,29 +73,10 @@ func (h *Gateway) processPDU(pdu PDU) *PDU {
 		return nil
 	}
 
-	h.protocolPort.Info("TX " + pdu.String())
-
-	var res *PDU
-	switch pdu.FunctionCode {
-	case FC2ReadDiscreteRegisters,
-		FC4ReadInputRegisters,
-		FC6WriteSingleRegister,
-		FC16WriteMultipleRegisters,
-		FC17ReadWriteMultipleRegisters:
-		res = slave.Process(pdu)
-	case FC5WriteSingleCoil:
-		addr := encoding.BytesToUint16(pdu.Payload[0:2])
-		value := encoding.BytesToUint16(pdu.Payload[2:4])
-		slave.registers[addr] = value
-		res = &PDU{
-			UnitID:       pdu.UnitID,
-			FunctionCode: pdu.FunctionCode,
-			Payload:      pdu.Payload[0:4],
-		}
-	}
-
+	h.protocolPort.Info("RX " + pdu.String())
+	res := slave.Process(pdu)
 	if res != nil {
-		h.protocolPort.Info("RX " + res.String())
+		h.protocolPort.Info("TX " + res.String())
 	}
 	return res
 }

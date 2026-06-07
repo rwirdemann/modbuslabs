@@ -30,6 +30,8 @@ func (s *Slave) Process(pdu PDU) *PDU {
 		return s.processFC2(pdu)
 	case FC4ReadInputRegisters:
 		return s.processFC4(pdu)
+	case FC5WriteSingleCoil:
+		return s.processFC5(pdu)
 	case FC6WriteSingleRegister:
 		return s.processFC6(pdu)
 	case FC16WriteMultipleRegisters:
@@ -113,6 +115,17 @@ func (s *Slave) processFC4(pdu PDU) *PDU {
 		payloadIndex += 2
 	}
 	return res
+}
+
+func (s *Slave) processFC5(pdu PDU) *PDU {
+	addr := encoding.BytesToUint16(pdu.Payload[0:2])
+	value := encoding.BytesToUint16(pdu.Payload[2:4])
+	s.registers[addr] = value
+	return &PDU{
+		UnitID:       pdu.UnitID,
+		FunctionCode: pdu.FunctionCode,
+		Payload:      pdu.Payload[0:4],
+	}
 }
 
 // FC6 payload format: [regAddr(2 bytes)][value(2 bytes)]
