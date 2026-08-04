@@ -28,6 +28,8 @@ func (s *Slave) Process(pdu PDU) *PDU {
 	switch pdu.FunctionCode {
 	case FC2ReadDiscreteRegisters:
 		return s.processFC2(pdu)
+	case FC3ReadHoldingRegisters:
+		return s.processFC3(pdu)
 	case FC4ReadInputRegisters:
 		return s.processFC4(pdu)
 	case FC5WriteSingleCoil:
@@ -78,6 +80,45 @@ func (h *Slave) processFC2(pdu PDU) *PDU {
 	}
 
 	res.Payload = append(res.Payload, encoding.EncodeBools(values)...)
+	return res
+}
+
+// processFC3 reads holding registers from the shared register map. It
+// mirrors processFC4: same map, same response shape, differing only in
+// the function code echoed back.
+func (s *Slave) processFC3(pdu PDU) *PDU {
+	addr := encoding.BytesToUint16(pdu.Payload[0:2])
+	quantity := encoding.BytesToUint16(pdu.Payload[2:4])
+	byteCount := uint8(quantity * 2)
+	res := &PDU{
+		UnitID:       pdu.UnitID,
+		FunctionCode: pdu.FunctionCode,
+		Payload:      make([]byte, 1+byteCount),
+		IsResponse:   true,
+	}
+	res.Payload[0] = byteCount
+
+	payloadIndex := 1
+	for i := range quantity {
+		currentAddr := addr + i
+		value := s.registers[currentAddr]
+		slog.Debug(
+			"FC3 read",
+			"unitID", pdu.UnitID,
+			"addr", fmt.Sprintf("0x%04X", currentAddr),
+			"value", fmt.Sprintf("0x%04X", value),
+		)
+		if targetReg, newValue, modified := s.ruleEngine.ApplyReadRules(
+			currentAddr, value,
+		); modified {
+			s.registers[targetReg] = newValue
+		}
+		copy(
+			res.Payload[payloadIndex:payloadIndex+2],
+			encoding.Uint16ToBytes(value),
+		)
+		payloadIndex += 2
+	}
 	return res
 }
 

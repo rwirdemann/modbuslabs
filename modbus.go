@@ -8,6 +8,7 @@ import (
 
 const (
 	FC2ReadDiscreteRegisters       uint8 = 0x02
+	FC3ReadHoldingRegisters        uint8 = 0x03
 	FC4ReadInputRegisters          uint8 = 0x04
 	FC5WriteSingleCoil             uint8 = 0x05
 	FC6WriteSingleRegister         uint8 = 0x06
@@ -32,7 +33,8 @@ func (p PDU) String() string {
 	}
 	addr := encoding.BytesToUint16(p.Payload[0:2])
 	switch p.FunctionCode {
-	case FC2ReadDiscreteRegisters, FC4ReadInputRegisters:
+	case FC2ReadDiscreteRegisters, FC3ReadHoldingRegisters,
+		FC4ReadInputRegisters:
 		qty := encoding.BytesToUint16(p.Payload[2:4])
 		return fmt.Sprintf(
 			"FC=%d UnitID=%d Addr=%d Qty=%X",
