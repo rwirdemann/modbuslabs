@@ -1,32 +1,36 @@
 # Modbuslabs
 
-## VirtualONS
+## SlaveSim
 
-VirtualONS is a cross-platform Modbus slave simulator. Slavesim serves the development of Modbus master applications without requiring actual Modbus devices. Slavesim simulates up to two buses, on which multiple Modbus slaves can be connected. Slaves can be connected and disconnected independently of each other, so that master applications can be developed for handling fragile connections. Each slave manages its own register tables, which can be written to and read from by the master.
+SlaveSim is a cross-platform Modbus slave simulator. SlaveSim serves the development of Modbus master applications without requiring actual Modbus devices. SlaveSim simulates up to two buses, on which multiple Modbus slaves can be connected. Slaves can be connected and disconnected independently of each other, so that master applications can be developed for handling fragile connections. Each slave manages its own register tables, which can be written to and read from by the master.
 
 ## Configuration
 
-Slavesim searches for its configurtion file slavesim.toml in $HOME/.config/slavesim. See [slavesim.example.toml](slavesim.example.toml) for avaialble settings.
+SlaveSim searches for its configurtion file SlaveSim.toml in $HOME/.config/SlaveSim. See [SlaveSim.example.toml](SlaveSim.example.toml) for avaialble settings.
 
 ## Supported Modbus Functions
 
-- FC2: Read discrete registers
+- FC2: Read Discrete Inputs
+- FC3: Read Holding Registers
+- FC4: Read Input Registers
+- FC5: Write Single Coil
+- FC6: Write Single Register
+- FC16: Write Multiple Registers
+- FC17: Read/Write Multiple Registers
 
 ### Design
 
-![virtualons](docs/core-design.drawio.png)
+![slavesim](docs/core-design.drawio.png)
 
 ### Usage
 
 ## Modbus RTU
 
-When a transport is configured with `type = "rtu"`, slavesim automatically
-launches a `socat` process to create a virtual serial port pair. The two
-TTY paths in the config have distinct roles:
+When a transport is configured with `type = "rtu"`, SlaveSim automatically
+launches a `socat` process to create a virtual serial port pair. The two TTY paths in the config have distinct roles:
 
-- `address` — the slave-side TTY that slavesim's RTU handler listens on
-- `peer_address` — the client-side TTY that the master or any other tool
-  connects to
+- `address` — the slave-side TTY that SlaveSim's RTU handler listens on
+- `peer_address` — the client-side TTY that the master or any other tool connects to
 
 ```toml
 [[transport]]
@@ -35,9 +39,7 @@ address     = "/tmp/ttyV0"
 peer_address = "/tmp/ttyV1"
 ```
 
-slavesim owns the lifecycle of the socat process: it is started before the
-gateway comes up and killed when slavesim exits. No manual socat setup is
-required.
+SlaveSim owns the lifecycle of the socat process: it is started before the gateway comes up and killed when SlaveSim exits. No manual socat setup is required.
 
 #### Read or write data
 
@@ -57,8 +59,12 @@ go run cmd/master/main.go --address 0x9000 --fc=4 --quantity=2 --transport=tcp
 ```
 
 ## Note about port forwarding
-Slavesim runs on tcp:502 and 503 (see default config). If you want to run the simulator without sudo, change the ports in your config to non-privileged ones like 5502. The following macOS command forwards 502 traffic to 5502 if you still want to be able to serve masters connecting via 502.
+SlaveSim runs on tcp:502 and 503 (see default config). If you want to run the simulator without sudo, change the ports in your config to non-privileged ones like 5502. The following macOS command forwards 502 traffic to 5502 if you still want to be able to serve masters connecting via 502.
 
 ```
+MacOS
 echo "rdr pass on lo0 inet proto tcp from any to any port 502 -> 127.0.0.1 port 5502" | sudo pfctl -ef -
+
+Linux
+sudo iptables -t nat -A OUTPUT -p tcp --dport 502 -j REDIRECT --to-port 5502
 ```
