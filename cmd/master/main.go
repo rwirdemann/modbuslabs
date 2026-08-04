@@ -48,6 +48,7 @@ func printUsage() {
 
 Subcommands:
   fc2   Read Discrete Inputs
+  fc3   Read Holding Registers
   fc4   Read Input Registers
   fc5   Write Single Coil
   fc6   Write Single Register
@@ -99,6 +100,56 @@ func main() {
 			bitIndex := i % 8
 			bitValue := (bb[byteIndex] >> bitIndex) & 0x01
 			fmt.Printf("  Input 0x%04X: %d (%v)\n", addrHex.Uint16()+uint16(i), bitValue, bitValue == 1)
+		}
+
+	case "fc3":
+		cmd := flag.NewFlagSet("fc3", flag.ExitOnError)
+		addr := cmd.String("addr", "0x000", "0x0000 to 0x270F")
+		transport := cmd.String("transport", "tcp", "tcp|rtu")
+		slaveID := cmd.Int("slave", 101, "slave id")
+		url := cmd.String("url", "localhost:502", "url to connect")
+		quantity := cmd.Int("quantity", 1, "number of registers to read")
+		typ := cmd.String("type", "uint16", "interpretation: uint16|int16|uint32|int32|float32")
+		cmd.Parse(os.Args[2:])
+
+		addrHex, err := encoding.NewHex(*addr)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		readQty := *quantity
+		if *typ == "uint32" || *typ == "int32" || *typ == "float32" {
+			readQty = 2
+		}
+
+		client, cleanup := connect(*transport, *url, *slaveID)
+		defer cleanup()
+
+		bb, err := client.ReadHoldingRegisters(addrHex.Uint16(), uint16(readQty))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		switch *typ {
+		case "uint16":
+			for i := 0; i < readQty; i++ {
+				fmt.Println(uint16(bb[i*2])<<8 | uint16(bb[i*2+1]))
+			}
+		case "int16":
+			for i := 0; i < readQty; i++ {
+				fmt.Println(int16(uint16(bb[i*2])<<8 | uint16(bb[i*2+1])))
+			}
+		case "uint32":
+			fmt.Println(uint32(bb[0])<<24 | uint32(bb[1])<<16 | uint32(bb[2])<<8 | uint32(bb[3]))
+		case "int32":
+			fmt.Println(int32(uint32(bb[0])<<24 | uint32(bb[1])<<16 | uint32(bb[2])<<8 | uint32(bb[3])))
+		case "float32":
+			high := uint16(bb[0])<<8 | uint16(bb[1])
+			low := uint16(bb[2])<<8 | uint16(bb[3])
+			fmt.Printf("%.6f\n", encoding.RegistersToFloat32(high, low))
+		default:
+			slog.Error("unknown type", "type", *typ)
+			os.Exit(1)
 		}
 
 	case "fc4":
@@ -329,7 +380,7 @@ func main() {
 		fmt.Printf("Wrote %d registers to 0x%04X with value: %s\n", writeQuantity, writeAddrHex.Uint16(), *value)
 
 	default:
-		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\nUsage: master <fc2|fc4|fc5|fc6|fc16|fc17> [flags]\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\nUsage: master <fc2|fc3|fc4|fc5|fc6|fc16|fc17> [flags]\n", os.Args[1])
 		os.Exit(1)
 	}
 }
